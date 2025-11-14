@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF--8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Lesson Plan Generator with RAG</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              'brand-primary': '#3b82f6', // blue-500
+              'brand-primary-hover': '#2563eb', // blue-600
+              'brand-bg': '#0f172a', // slate-900
+              'brand-surface': '#1e293b', // slate-800
+              'brand-panel': '#334155', // slate-700 (for panels/borders)
+              'brand-text-light': '#f1f5f9', // slate-100
+              'brand-text-medium': '#94a3b8', // slate-400
+              'brand-text-dark': '#64748b', // slate-500
+              'brand-border': '#334155', // slate-700
+            },
+          }
+        }
+      }
+    </script>
+    <style>
+      /* Custom Scrollbar for Webkit browsers */
+      .custom-scrollbar::-webkit-scrollbar {
+        width: 8px;
+      }
+      .custom-scrollbar::-webkit-scrollbar-track {
+        background: #1e293b; /* brand-surface */
+        border-radius: 10px;
+      }
+      .custom-scrollbar::-webkit-scrollbar-thumb {
+        background: #334155; /* brand-panel */
+        border-radius: 10px;
+      }
+      .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+        background: #64748b; /* brand-text-dark */
+      }
+      /* Style for the summary marker */
+      summary {
+        list-style: none; /* Remove default marker */
+      }
+      summary::-webkit-details-marker {
+        display: none;
+      }
+      summary::before {
+        content: '►';
+        margin-right: 0.5rem;
+        font-size: 0.8em;
+        transition: transform 0.2s;
+        display: inline-block;
+      }
+      details[open] > summary::before {
+        transform: rotate(90deg);
+      }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "react/": "https://aistudiocdn.com/react@^19.2.0/",
+    "react": "https://aistudiocdn.com/react@^19.2.0",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.29.0",
+    "react-dropzone": "https://aistudiocdn.com/react-dropzone@^14.3.8",
+    "docx": "https://aistudiocdn.com/docx@^8.5.0",
+    "file-saver": "https://aistudiocdn.com/file-saver@^2.0.5"
+  }
+}
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.10/pdfmake.min.js" defer></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.10/vfs_fonts.js" defer></script>
+</head>
+  <body class="bg-brand-bg text-brand-text-light">
+    <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
+  </body>
+</html>
