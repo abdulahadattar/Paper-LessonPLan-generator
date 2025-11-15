@@ -13,32 +13,7 @@ import {
   ISectionOptions,
 } from 'docx';
 import saveAs from 'file-saver';
-import { LessonPlan, Activity } from '../types';
-
-// Declaration for pdfmake, which is loaded via a script tag in index.html
-declare const pdfMake: any;
-
-// Define a custom table layout for the lesson plan header
-if (typeof pdfMake !== 'undefined' && pdfMake.tableLayouts) {
-  pdfMake.tableLayouts.lessonPlanHeader = {
-    hLineWidth: function (i: number, node: any) {
-      if (i === 0 || i === node.table.body.length) return 1.5; // Outer top & bottom border
-      if (i === 1) return 1.5; // Thicker line under main title
-      return 1; // All other horizontal lines
-    },
-    vLineWidth: function (i: number, node: any) {
-      if (i === 0 || i === node.table.widths.length) return 1.5; // Outer left & right
-      return 1; // Inner vertical lines
-    },
-    hLineColor: function () { return '#000000'; },
-    vLineColor: function () { return '#000000'; },
-    paddingLeft: function() { return 5; },
-    paddingRight: function() { return 5; },
-    paddingTop: function() { return 4; },
-    paddingBottom: function() { return 4; }
-  };
-}
-
+import { LessonPlan } from '../types';
 
 // --- UTILITY FUNCTIONS ---
 
@@ -167,91 +142,6 @@ const createDocxContentForPlan = (lessonPlan: LessonPlan): (Paragraph | Table)[]
   return children;
 };
 
-// --- PDF PARSING AND HELPERS ---
-
-const parseTextForPdf = (text: string): any[] => {
-    const parts: any[] = [];
-    const regex = /(\$\$[\s\S]*?\$\$|\$[^\s](?:[^\$]*[^\s])?\$|\*\*.*?\*\*|\*.*?\*)/g;
-    let lastIndex = 0;
-    let match;
-
-    while ((match = regex.exec(text)) !== null) {
-        if (match.index > lastIndex) {
-            parts.push({ text: text.substring(lastIndex, match.index) });
-        }
-        const matchedText = match[0];
-        if (matchedText.startsWith('$$') && matchedText.endsWith('$$')) {
-            parts.push({ text: matchedText.slice(2, -2).trim(), bold: true, italics: true, fontSize: 12 });
-        } else if (matchedText.startsWith('$') && matchedText.endsWith('$')) {
-            parts.push({ text: matchedText.slice(1, -1), bold: true, italics: true });
-        } else if (matchedText.startsWith('**') && matchedText.endsWith('**')) {
-            parts.push({ text: matchedText.slice(2, -2), bold: true });
-        } else if (matchedText.startsWith('*') && matchedText.endsWith('*')) {
-            parts.push({ text: matchedText.slice(1, -1), italics: true });
-        }
-        lastIndex = match.index + matchedText.length;
-    }
-    if (lastIndex < text.length) {
-        parts.push({ text: text.substring(lastIndex) });
-    }
-    return parts;
-};
-
-const createPdfRichText = (text: string) => ({ text: parseTextForPdf(text), style: 'body' });
-
-const createPdfContentForPlan = (lessonPlan: LessonPlan): any[] => {
-    const teacherName = "Abdul Ahad";
-    const schoolPlaceholder = "Peoples Higher Secondary School Jamshoro";
-    const dateTimeline = '____________________';
-    const period = '1';
-    const gradeShort = lessonPlan.gradeLevel.replace('Grade ', '').split(' ')[0];
-
-    const headerTable = {
-        layout: 'lessonPlanHeader', // Use the custom layout
-        table: {
-            widths: ['auto', '*', 'auto', '*'],
-            body: [
-                // Row 1: Title
-                [{ colSpan: 4, text: `${schoolPlaceholder}\nDAILY LESSON PLAN`, style: 'headerTableTitle' }, {}, {}, {}],
-                // Row 2: Grade, Subject, etc.
-                [
-                    { text: [{ text: 'GRADE: ', bold: true }, gradeShort], style: 'headerTableSub' }, 
-                    { text: [{ text: 'SUBJECT: ', bold: true }, { text: lessonPlan.subject, bold: true }], style: 'headerTableSub' }, 
-                    { text: [{ text: 'PERIODS: ', bold: true }, { text: period, bold: true }], style: 'headerTableSub' }, 
-                    { text: [{ text: 'DATE/TIMELINE: ', bold: true }, dateTimeline], style: 'headerTableSub' }
-                ],
-                // Row 3: Topic
-                [{ colSpan: 4, text: [{ text: 'LESSON TOPIC: ', bold: true }, lessonPlan.title], style: 'headerTableBody' }, {}, {}, {}],
-                // Row 4: Objective
-                [{ colSpan: 4, text: [{ text: 'LEARNING OBJECTIVE: ', bold: true }, lessonPlan.objective], style: 'headerTableBody' }, {}, {}, {}],
-                // Row 5: Teacher
-                [{ colSpan: 4, text: [{ text: 'TEACHER: ', bold: true }, { text: teacherName, bold: true }], style: 'headerTableBody' }, {}, {}, {}],
-            ]
-        },
-        margin: [0, 0, 0, 10] 
-    };
-    
-    const resourcesSection = [
-        { text: 'RESOURCES', style: 'sectionHeader' },
-        { ul: lessonPlan.materials.length > 0 ? lessonPlan.materials.map(m => createPdfRichText(m)) : [{ text: 'No materials required.', style: 'body' }] },
-    ];
-
-    const procedureSection = [
-        { text: 'LESSON PROCEDURE & TIMINGS', style: 'sectionHeader' },
-        ...lessonPlan.activities.flatMap(activity => ([
-            { text: `${activity.name.toUpperCase()} (${activity.duration} mins)`, bold: true, margin: [0, 8, 0, 4] },
-            createPdfRichText(activity.description)
-        ])),
-    ];
-
-    const homeworkSection = [
-        { text: 'HOMEWORK ASSIGNMENT', style: 'sectionHeader' },
-        createPdfRichText(lessonPlan.homework),
-    ];
-
-    return [headerTable, ...resourcesSection, ...procedureSection, ...homeworkSection];
-};
-
 // --- SINGLE EXPORT FUNCTIONS ---
 
 export const exportAsDocx = async (lessonPlan: LessonPlan, sloId?: string): Promise<void> => {
@@ -269,21 +159,26 @@ export const exportAsDocx = async (lessonPlan: LessonPlan, sloId?: string): Prom
 };
 
 export const exportAsPdf = async (lessonPlan: LessonPlan, sloId?: string): Promise<void> => {
-    const fileName = `${formatFileName(lessonPlan.title, sloId)}.pdf`;
-    const content = createPdfContentForPlan(lessonPlan);
-    const docDefinition: any = {
-        pageMargins: [15, 5, 15, 5],
-        content: content,
-        styles: {
-            headerTableTitle: { fontSize: 14, bold: true, alignment: 'center', margin: [0, 2, 0, 2] },
-            headerTableSub: { fontSize: 9, alignment: 'left' },
-            headerTableBody: { fontSize: 9, alignment: 'left' },
-            sectionHeader: { fontSize: 12, bold: true, color: '#1F4E79', margin: [0, 15, 0, 5], decoration: 'underline', decorationColor: '#1F4E79' },
-            body: { fontSize: 10, lineHeight: 1.2, alignment: 'justify' },
-        },
-        defaultStyle: { font: 'Roboto' }
-    };
-    pdfMake.createPdf(docDefinition).download(fileName);
+  const fileName = `${formatFileName(lessonPlan.title, sloId)}.pdf`;
+  try {
+    const response = await fetch('http://localhost:5001/generate-pdf', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(lessonPlan),
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const blob = await response.blob();
+    saveAs(blob, fileName);
+  } catch (error) {
+    console.error('Error generating PDF:', error);
+    alert('Failed to generate PDF. Please ensure the backend server is running.');
+  }
 };
 
 // --- MULTIPLE EXPORT FUNCTIONS ---
@@ -304,26 +199,9 @@ export const exportMultipleLessonsAsDocx = async (lessonPlans: LessonPlan[], fil
 };
 
 export const exportMultipleLessonsAsPdf = async (lessonPlans: LessonPlan[], fileName: string): Promise<void> => {
-    const allContent = lessonPlans.flatMap((plan, index) => {
-        const content = createPdfContentForPlan(plan);
-        if (index > 0) {
-            return [{ text: '', pageBreak: 'before' as const }, ...content];
-        }
-        return content;
-    });
-
-    const docDefinition: any = {
-        pageMargins: [15, 5, 15, 5],
-        content: allContent,
-        styles: {
-            headerTableTitle: { fontSize: 14, bold: true, alignment: 'center', margin: [0, 2, 0, 2] },
-            headerTableSub: { fontSize: 9, alignment: 'left' },
-            headerTableBody: { fontSize: 9, alignment: 'left' },
-            sectionHeader: { fontSize: 12, bold: true, color: '#1F4E79', margin: [0, 15, 0, 5], decoration: 'underline', decorationColor: '#1F4E79' },
-            body: { fontSize: 10, lineHeight: 1.2, alignment: 'justify' },
-        },
-        defaultStyle: { font: 'Roboto' }
-    };
-
-    pdfMake.createPdf(docDefinition).download(`${fileName}.pdf`);
+    // This function is not yet implemented for the backend service.
+    // For now, we will generate a PDF for the first lesson plan only.
+    if (lessonPlans.length > 0) {
+        await exportAsPdf(lessonPlans[0], fileName);
+    }
 };

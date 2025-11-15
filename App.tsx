@@ -268,7 +268,7 @@ const SloPanel: React.FC<SloPanelProps> = ({ unitsByGrade, allSlos, selectedSloU
                                   style={{ borderLeft: `4px solid ${getUnitAccentColor(unitName)}` }}
                               >
                                   <ParentCheckbox slos={slos} onToggle={handleUnitSelection} />
-                                  <span className="flex-grow">{unitName}</span>
+                                  <span>{unitName}</span>
                               </summary>
                               
                               <div className="pl-14 pr-4 pb-1 bg-brand-bg/30">
