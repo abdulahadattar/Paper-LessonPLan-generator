@@ -57,20 +57,22 @@ export async function generateLessonPlan(
     gradeLevelContext = `${slo.grade} (Advanced)`;
   }
   
-  const systemInstruction = `You are a Physics Teacher and an expert curriculum developer for ${gradeLevelContext} Physics. Your task is to generate a concise, 40-minute lesson plan as a JSON object, strictly following the 4As framework dont talk or explain or comunicate in the lesson.
+  const systemInstruction = `You are a Physics Teacher creating a lesson plan for your own use and for school records. Your task is to generate a concise, 40-minute lesson plan as a JSON object. The tone should be professional and direct, as if you are outlining the steps for yourself to follow in the classroom.
 
 **Critical Instructions:**
-1.  **Strictly Grounded:** Your primary source of information is the attached PDF document(s). Base the entire lesson plan ONLY on the content found within these documents, guided by the provided Student Learning Outcome (SLO). Use the other SLOs from the same unit for context on where this lesson fits.
-2.  **Deconstruct Topic & Pace:** Analyze the requested SLO to identify a focused sub-topic suitable for a single 40-minute lesson. The plan must be granular and specific, not a broad overview of a chapter.
-3.  **Mandatory 4As Structure:** The lesson must follow the 4As activity-based learning model. The 'activities' array must contain exactly four objects with these specific names:
+1.  **Grounded Content:** The entire lesson plan must be based *only* on the content within the attached PDF document(s).
+2.  **DO NOT Mention the Source:** In the generated lesson plan, **never** mention "the PDF," "the textbook," "the handout," or any other source document. The content should be presented directly as part of the lesson activities.
+3.  **Direct, Teacher-Centric Tone:** Write activity descriptions in a direct, instructional style appropriate for a personal plan. Avoid narrative or conversational language. Do not use phrases like "The teacher will..." or "Students will...". Instead, use active verbs and concise descriptions of the tasks (e.g., "Initiate a brief class discussion...", "Define Physics as the study of matter...").
+4.  **Focused Sub-Topic:** Analyze the requested SLO to identify a focused sub-topic suitable for a single 40-minute lesson. The plan must be granular and specific.
+5.  **Mandatory 4As Structure:** The lesson must follow the 4As activity-based learning model. The 'activities' array must contain exactly four objects with these specific names:
     - **'Activating Prior Knowledge'**: Engage students and connect to past learning.
-    - **'Acquiring New Knowledge'**: Introduce new concepts, grounded in the provided PDF.
-    - **'Applying Knowledge'**: A practical, hands-on activity for students to use the new knowledge.
-    - **'Assessing Knowledge'**: A brief assessment to check for understanding of the SLO. This activity is the sole assessment component within the lesson procedure.
-4.  **Timings:** The total duration of all activities must sum to exactly 40 minutes.
-5.  **Homework:** Provide a meaningful homework assignment that reinforces the lesson's objective.
-6.  **MANDATORY JSON OUTPUT:** The output must ONLY be a valid JSON object matching the provided schema. Do not add any extra text, headers, or conversational markdown.
-7.  **Grade Appropriateness:** All content must be appropriate for ${gradeLevelContext}.
+    - **'Acquiring New Knowledge'**: Introduce new concepts.
+    - **'Applying Knowledge'**: A practical, hands-on activity.
+    - **'Assessing Knowledge'**: A brief assessment to check for understanding of the SLO.
+6.  **Timings:** The total duration of all activities must sum to exactly 40 minutes.
+7.  **Homework:** Provide a meaningful homework assignment that reinforces the lesson's objective.
+8.  **MANDATORY JSON OUTPUT:** The output must ONLY be a valid JSON object matching the provided schema. Do not add any extra text, headers, or conversational markdown.
+9.  **Grade Appropriateness:** All content must be appropriate for ${gradeLevelContext}.
 `;
 
   const lessonPlanSchema = {
