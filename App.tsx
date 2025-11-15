@@ -252,7 +252,7 @@ const SloPanel: React.FC<SloPanelProps> = ({ unitsByGrade, allSlos, selectedSloU
                   {/* Grade Header */}
                   <summary className="sticky top-0 bg-brand-bg/80 backdrop-blur-sm z-10 flex items-center gap-4 px-1 py-2 cursor-pointer">
                       <ParentCheckbox slos={allSlosInGrade} onToggle={handleGradeSelection} />
-                      <h3 className="font-bold text-2xl text-brand-text-light tracking-wide">{grade}</h3>
+                      <h3 className="font-bold text-2xl text-brand-text-light tracking-wide flex-1">{grade}</h3>
                   </summary>
                   
                   {/* Units Container */}
@@ -264,7 +264,7 @@ const SloPanel: React.FC<SloPanelProps> = ({ unitsByGrade, allSlos, selectedSloU
                       }).map(([unitName, slos]) => (
                           <details key={unitName} open className="bg-brand-surface rounded-r-lg shadow-sm overflow-hidden group">
                               <summary 
-                                  className="sticky top-12 cursor-pointer font-semibold p-3 flex items-center gap-4 text-brand-text-light/95 hover:bg-brand-panel transition-colors bg-brand-surface z-5"
+                                  className="sticky top-12 cursor-pointer font-semibold p-3 flex items-center gap-4 text-brand-text-light/95 hover:bg-slate-700/50 transition-colors bg-brand-surface z-5"
                                   style={{ borderLeft: `4px solid ${getUnitAccentColor(unitName)}` }}
                               >
                                   <ParentCheckbox slos={slos} onToggle={handleUnitSelection} />
@@ -757,7 +757,7 @@ const App: React.FC = () => {
           </div>
       </aside>
 
-      <main className={`flex-1 flex flex-col overflow-hidden bg-brand-bg ${isSidebarOpen ? 'hidden md:flex' : 'flex'}`}>
+      <main className="flex-1 flex flex-col overflow-hidden bg-brand-bg">
         <Header directoryName={directoryName} />
         {!isSidebarOpen && (
             <button 
