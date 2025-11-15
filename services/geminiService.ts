@@ -73,6 +73,7 @@ export async function generateLessonPlan(
 7.  **Homework:** Provide a meaningful homework assignment that reinforces the lesson's objective.
 8.  **MANDATORY JSON OUTPUT:** The output must ONLY be a valid JSON object matching the provided schema. Do not add any extra text, headers, or conversational markdown.
 9.  **Grade Appropriateness:** All content must be appropriate for ${gradeLevelContext}.
+10. **LaTeX for Equations:** All mathematical formulas, scientific equations, and variables must be enclosed in LaTeX delimiters. Use single dollar signs for inline equations (e.g., `$E=mc^2$`) and double dollar signs for block-level equations (e.g., `$$ a^2 + b^2 = c^2 $$`).
 `;
 
   const lessonPlanSchema = {
