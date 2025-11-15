@@ -1,9 +1,10 @@
+
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { SLO, GroupedSlos, LessonPlan } from './types';
 import { generateLessonPlan } from './services/geminiService';
 import { loadInitialSlos } from './services/sloService';
 import InputPanel from './components/InputPanel';
-import { InfoIcon, BrandIcon, MenuIcon, CloseIcon, CheckCircleIcon, StopIcon } from './components/icons/MiscIcons';
+import { InfoIcon, BrandIcon, MenuIcon, CloseIcon, CheckCircleIcon, StopIcon, WarningIcon } from './components/icons/MiscIcons';
 import { FileIcon } from './components/icons/FileIcon';
 import { WandIcon } from './components/icons/WandIcon';
 import { exportAsPdf, exportAsDocx, formatFileName, exportMultipleLessonsAsDocx, exportMultipleLessonsAsPdf } from './services/exportService';
@@ -28,10 +29,48 @@ interface SloPanelProps {
   selectedSloUniqueIds: string[];
   setSelectedSloUniqueIds: React.Dispatch<React.SetStateAction<string[]>>;
   isParsing: boolean;
-  areFilesReady: boolean;
+  onClearSelection: () => void;
+  missingPdfSloIds: string[];
 }
 
-const SloPanel: React.FC<SloPanelProps> = ({ unitsByGrade, selectedSloUniqueIds, setSelectedSloUniqueIds, isParsing }) => {
+const getGradeSloColorClasses = (grade?: string): string => {
+  if (!grade) return 'bg-slate-700 text-slate-200';
+  const gradeNum = parseInt(grade.replace('Grade ', ''), 10);
+  switch (gradeNum) {
+    case 9:
+      return 'bg-sky-800 text-sky-200';
+    case 10:
+      return 'bg-emerald-800 text-emerald-200';
+    case 11:
+      return 'bg-amber-800 text-amber-200';
+    case 12:
+      return 'bg-rose-800 text-rose-200';
+    default:
+      return 'bg-slate-700 text-slate-200';
+  }
+};
+
+const unitAccentColors = [
+    '#38bdf8', // sky-400
+    '#4ade80', // green-400
+    '#a78bfa', // violet-400
+    '#facc15', // yellow-400
+    '#f472b6', // pink-400
+    '#22d3ee', // cyan-400
+];
+
+const getUnitAccentColor = (unitName: string): string => {
+    const unitNumMatch = unitName.match(/\d+/);
+    if (!unitNumMatch) {
+        const hash = unitName.split('').reduce((acc, char) => char.charCodeAt(0) + ((acc << 5) - acc), 0);
+        return unitAccentColors[Math.abs(hash) % unitAccentColors.length];
+    }
+    const unitNum = parseInt(unitNumMatch[0], 10);
+    return unitAccentColors[unitNum % unitAccentColors.length];
+};
+
+
+const SloPanel: React.FC<SloPanelProps> = ({ unitsByGrade, selectedSloUniqueIds, setSelectedSloUniqueIds, isParsing, onClearSelection, missingPdfSloIds }) => {
   const [searchQuery, setSearchQuery] = useState('');
 
   const filteredUnitsByGrade = useMemo(() => {
@@ -48,10 +87,11 @@ const SloPanel: React.FC<SloPanelProps> = ({ unitsByGrade, selectedSloUniqueIds,
       return Object.entries(gradeUnits)
         .map(([unitName, slos]) => ({ unitName, slos: filterSlos(slos) }))
         .filter(({ slos }) => slos.length > 0)
+        // FIX: Added a generic type argument to `reduce` to correctly type the accumulator. This resolves an error where the accumulator was inferred as `{}`, which lacks an index signature for property assignment.
         .reduce<GroupedSlos>((acc, { unitName, slos }) => {
           acc[unitName] = slos;
           return acc;
-        }, {} as GroupedSlos);
+        }, {});
     };
 
     return Object.entries(unitsByGrade)
@@ -93,7 +133,7 @@ const SloPanel: React.FC<SloPanelProps> = ({ unitsByGrade, selectedSloUniqueIds,
 
   const ParentCheckbox: React.FC<{ slos: SLO[]; onToggle: (slos: SLO[]) => void }> = ({ slos, onToggle }) => {
     const selectedCount = slos.filter(slo => selectedSloUniqueIds.includes(slo.uniqueId!)).length;
-    const isAllSelected = selectedCount === slos.length;
+    const isAllSelected = selectedCount === slos.length && slos.length > 0;
     const isIndeterminate = selectedCount > 0 && selectedCount < slos.length;
     const checkboxRef = React.useRef<HTMLInputElement>(null);
 
@@ -134,7 +174,17 @@ const SloPanel: React.FC<SloPanelProps> = ({ unitsByGrade, selectedSloUniqueIds,
   return (
     <div className="h-full flex flex-col custom-scrollbar">
       <div className="flex-shrink-0 px-4 pt-4">
-        <h2 className="text-xl font-bold text-brand-text-light mb-1">Student Learning Outcomes (SLOs)</h2>
+        <div className="flex justify-between items-center mb-1">
+          <h2 className="text-xl font-bold text-brand-text-light">Student Learning Outcomes (SLOs)</h2>
+          {selectedSloUniqueIds.length > 0 && (
+            <button
+              onClick={onClearSelection}
+              className="text-xs font-semibold text-brand-primary hover:underline"
+            >
+              Clear selection
+            </button>
+          )}
+        </div>
         <p className="text-sm text-brand-text-medium">Select SLOs to generate lesson plans.</p>
         {hasSlos && (
              <input
@@ -149,47 +199,61 @@ const SloPanel: React.FC<SloPanelProps> = ({ unitsByGrade, selectedSloUniqueIds,
 
       <div className="flex-grow overflow-y-auto custom-scrollbar px-4 pb-32">
         {hasSlos ? (
-          <div className="mt-2">
+          <div className="mt-4 space-y-6">
             {Object.entries(filteredUnitsByGrade).sort(([gradeA], [gradeB]) => parseInt(gradeA.replace('Grade ', '')) - parseInt(gradeB.replace('Grade ', ''))).map(([grade, units]) => {
               const allSlosInGrade = Object.values(units).flat();
               return (
-                <details key={grade} open className="mb-2">
-                  <summary className="cursor-pointer font-semibold text-md text-brand-text-light flex items-center gap-3 p-2 bg-brand-surface/50 rounded-t-lg border-b border-brand-border/50">
-                    <ParentCheckbox slos={allSlosInGrade} onToggle={handleGradeSelection} />
-                    {grade}
+                <details key={grade} open>
+                  {/* Grade Header */}
+                  <summary className="flex items-center gap-4 px-1 py-2 cursor-pointer">
+                      <ParentCheckbox slos={allSlosInGrade} onToggle={handleGradeSelection} />
+                      <h3 className="font-bold text-xl text-brand-text-light tracking-wide flex-1">{grade}</h3>
                   </summary>
-                  <div className="bg-brand-surface/20 rounded-b-lg">
-                    {Object.entries(units).sort(([unitNameA], [unitNameB]) => {
-                        const numA = parseInt(unitNameA.match(/\d+/)?.[0] || '0');
-                        const numB = parseInt(unitNameB.match(/\d+/)?.[0] || '0');
-                        return numA - numB;
-                    }).map(([unitName, slos]) => (
-                      <details key={unitName} open className="border-t border-brand-border/30">
-                        <summary className="cursor-pointer font-medium p-2 text-sm flex items-center gap-3 text-brand-text-light/90">
-                          <ParentCheckbox slos={slos} onToggle={handleUnitSelection} />
-                          {unitName}
-                        </summary>
-                        <div className="pl-8 pr-2 pb-1">
-                          {slos.map(slo => (
-                            <div key={slo.uniqueId} className="flex items-start gap-3 py-3 border-t border-brand-border/20">
-                              <input
-                                type="checkbox"
-                                checked={selectedSloUniqueIds.includes(slo.uniqueId!)}
-                                onChange={() => handleSloSelection(slo.uniqueId!)}
-                                className="form-checkbox h-4 w-4 text-brand-primary bg-brand-surface border-brand-border rounded focus:ring-brand-primary/50 mt-0.5 flex-shrink-0"
-                                aria-labelledby={`slo-text-${slo.uniqueId}`}
-                              />
-                              <div className="flex-1">
-                                <span className="font-mono text-xs text-blue-300 bg-blue-900/50 px-2 py-1 rounded-full">{slo.SLO_ID}</span>
-                                <p id={`slo-text-${slo.uniqueId}`} title={slo.SLO_Text} className="text-sm text-brand-text-medium mt-1">{slo.SLO_Text}</p>
+                  
+                  {/* Units Container */}
+                  <div className="space-y-2 mt-2 pl-4 border-l-2 border-brand-panel">
+                      {Object.entries(units).sort(([unitNameA], [unitNameB]) => {
+                          const numA = parseInt(unitNameA.match(/\d+/)?.[0] || '0');
+                          const numB = parseInt(unitNameB.match(/\d+/)?.[0] || '0');
+                          return numA - numB;
+                      }).map(([unitName, slos]) => (
+                          <details key={unitName} open className="bg-brand-surface rounded-r-lg shadow-sm overflow-hidden group">
+                              <summary 
+                                  className="cursor-pointer font-semibold p-3 flex items-center gap-4 text-brand-text-light/95 hover:bg-slate-700/50 transition-colors"
+                                  style={{ borderLeft: `4px solid ${getUnitAccentColor(unitName)}` }}
+                              >
+                                  <ParentCheckbox slos={slos} onToggle={handleUnitSelection} />
+                                  <span className="flex-grow">{unitName}</span>
+                              </summary>
+                              
+                              <div className="pl-14 pr-4 pb-1 bg-brand-bg/30">
+                                  {slos.map(slo => (
+                                      <div key={slo.uniqueId} className="flex items-start gap-3 py-4 border-t border-brand-border/80">
+                                          <input
+                                              type="checkbox"
+                                              checked={selectedSloUniqueIds.includes(slo.uniqueId!)}
+                                              onChange={() => handleSloSelection(slo.uniqueId!)}
+                                              className="form-checkbox h-4 w-4 text-brand-primary bg-brand-surface border-brand-border rounded focus:ring-brand-primary/50 mt-1 flex-shrink-0"
+                                              aria-labelledby={`slo-text-${slo.uniqueId}`}
+                                          />
+                                          <div className="flex-1 flex justify-between items-start gap-2">
+                                              <div>
+                                                  <span className={`font-mono text-xs px-2 py-1 rounded-md ${getGradeSloColorClasses(slo.grade)}`}>{slo.SLO_ID}</span>
+                                                  <p id={`slo-text-${slo.uniqueId}`} title={slo.SLO_Text} className="text-sm text-brand-text-medium mt-2 leading-relaxed">{slo.SLO_Text}</p>
+                                              </div>
+                                              {missingPdfSloIds.includes(slo.uniqueId!) && (
+                                                  <div title="Context PDF file is missing for this SLO's unit." className="pt-0.5">
+                                                      <WarningIcon className="w-5 h-5 text-amber-400 flex-shrink-0" />
+                                                  </div>
+                                              )}
+                                          </div>
+                                      </div>
+                                  ))}
                               </div>
-                            </div>
-                          ))}
-                        </div>
-                      </details>
-                    ))}
+                          </details>
+                      ))}
                   </div>
-                </details>
+              </details>
               )
             })}
           </div>
@@ -373,18 +437,23 @@ const App: React.FC = () => {
     processDirectoryFiles();
   }, [directoryFiles]);
   
-  const areFilesReady = useMemo(() => {
-    if (selectedSloUniqueIds.length === 0) return true; // No selection, no requirement
-    
+  const missingPdfSloIds = useMemo(() => {
     const selectedSlos = allSlos.filter(slo => selectedSloUniqueIds.includes(slo.uniqueId!));
-    
-    return selectedSlos.every(slo => {
-      const grade = slo.grade;
-      const unit = slo.Unit_Number;
-      return contextPdfs.some(pdf => pdf.grade === grade && parseInt(pdf.unit, 10) === parseInt(unit, 10));
-    });
-  }, [selectedSloUniqueIds, allSlos, contextPdfs]);
+    if (selectedSlos.length === 0) return [];
 
+    return selectedSlos
+        .filter(slo => {
+            const grade = slo.grade;
+            const unitNumStr = slo.Unit_Number;
+            const sloUnitNum = parseInt(unitNumStr, 10);
+            if (isNaN(sloUnitNum)) return true; // Assume missing if SLO unit is not a number
+
+            return !contextPdfs.some(pdf => 
+                pdf.grade === grade && parseInt(pdf.unit, 10) === sloUnitNum
+            );
+        })
+        .map(slo => slo.uniqueId!);
+}, [selectedSloUniqueIds, allSlos, contextPdfs]);
 
   const fileToPart = async (file: File): Promise<Part> => {
     const base64 = await new Promise<string>((resolve, reject) => {
@@ -565,6 +634,10 @@ const App: React.FC = () => {
     isCancelledRef.current = true;
   }, []);
 
+  const handleClearSelection = useCallback(() => {
+    setSelectedSloUniqueIds([]);
+  }, []);
+
   const exportOptions: {id: ExportOption; title: string; description: string}[] = [
     { id: 'individual', title: 'Individual Files', description: 'PDF + DOCX for each SLO' },
     { id: 'byUnit', title: 'Combine by Unit', description: 'One file per Unit' },
@@ -619,7 +692,8 @@ const App: React.FC = () => {
               selectedSloUniqueIds={selectedSloUniqueIds}
               setSelectedSloUniqueIds={setSelectedSloUniqueIds}
               isParsing={isParsing}
-              areFilesReady={areFilesReady}
+              onClearSelection={handleClearSelection}
+              missingPdfSloIds={missingPdfSloIds}
             />
 
             {selectedSloUniqueIds.length > 0 && !isLoading && !isComplete && (
@@ -639,13 +713,13 @@ const App: React.FC = () => {
                     </div>
                     <button 
                         onClick={generateAllLessonPlans} 
-                        disabled={!areFilesReady}
+                        disabled={missingPdfSloIds.length > 0}
                         className="bg-brand-primary text-white font-bold py-3 px-5 rounded-lg hover:bg-brand-primary-hover transition-all disabled:bg-brand-panel disabled:cursor-not-allowed flex items-center justify-center gap-2 text-base shadow-lg shadow-brand-primary/20 disabled:shadow-none"
                     >
                       <WandIcon className="w-5 h-5" />
                       Generate ({selectedSloUniqueIds.length})
                     </button>
-                    {!areFilesReady && <p className="text-xs text-red-400 bg-brand-bg/80 backdrop-blur-sm px-2 py-1 rounded">Some context PDFs are missing.</p>}
+                    {missingPdfSloIds.length > 0 && <p className="text-xs text-red-400 bg-brand-bg/80 backdrop-blur-sm px-2 py-1 rounded">Missing context PDFs for {missingPdfSloIds.length} SLO{missingPdfSloIds.length > 1 ? 's' : ''}.</p>}
                 </div>
             )}
             

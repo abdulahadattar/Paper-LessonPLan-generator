@@ -1,11 +1,16 @@
+
 import React, { useRef } from 'react';
 import { FileIcon } from './icons/FileIcon';
 
-declare module 'react' {
-    interface InputHTMLAttributes<T> extends HTMLAttributes<T> {
-      webkitdirectory?: string;
-      directory?: string;
-    }
+// FIX: Corrected React module augmentation for non-standard input attributes.
+// Using `declare global` to augment the React namespace avoids potential module resolution issues.
+declare global {
+  namespace React {
+      interface InputHTMLAttributes<T> {
+        webkitdirectory?: string;
+        directory?: string;
+      }
+  }
 }
 
 interface ContextPdfForDisplay {
@@ -19,6 +24,44 @@ interface InputPanelProps {
   directoryName: string | null;
   contextPdfs: ContextPdfForDisplay[];
 }
+
+const getGradeColorClasses = (grade: string): string => {
+  const gradeNum = parseInt(grade.replace('Grade ', ''), 10);
+  switch (gradeNum) {
+    case 9:
+      return 'text-blue-300 bg-blue-900/50';
+    case 10:
+      return 'text-emerald-300 bg-emerald-900/50';
+    case 11:
+      return 'text-amber-300 bg-amber-900/50';
+    case 12:
+      return 'text-rose-300 bg-rose-900/50';
+    default:
+      return 'text-slate-300 bg-slate-700';
+  }
+};
+
+const unitColors = [
+    'text-teal-300 bg-teal-900/50',
+    'text-cyan-300 bg-cyan-900/50',
+    'text-sky-300 bg-sky-900/50',
+    'text-indigo-300 bg-indigo-900/50',
+    'text-violet-300 bg-violet-900/50',
+    'text-purple-300 bg-purple-900/50',
+    'text-fuchsia-300 bg-fuchsia-900/50',
+    'text-pink-300 bg-pink-900/50',
+];
+
+const getUnitColorClasses = (unit: string): string => {
+  const unitNum = parseInt(unit, 10);
+  if (isNaN(unitNum)) {
+    // Fallback for non-numeric units
+    const hash = unit.split('').reduce((acc, char) => char.charCodeAt(0) + ((acc << 5) - acc), 0);
+    return unitColors[Math.abs(hash) % unitColors.length];
+  }
+  return unitColors[unitNum % unitColors.length];
+};
+
 
 const InputPanel: React.FC<InputPanelProps> = ({ 
     onDirectorySelected,
@@ -70,8 +113,8 @@ const InputPanel: React.FC<InputPanelProps> = ({
                                 <div key={pdf.name} className="flex items-center gap-2 p-1.5 bg-brand-panel/50 rounded">
                                     <FileIcon className="w-4 h-4 text-brand-primary flex-shrink-0" />
                                     <span className="text-xs text-brand-text-light truncate flex-grow" title={pdf.name}>{pdf.name}</span>
-                                    <span className="text-xs font-medium text-blue-300 bg-blue-900/50 px-1.5 py-0.5 rounded-full flex-shrink-0">{pdf.grade}</span>
-                                    <span className="text-xs font-medium text-green-300 bg-green-900/50 px-1.5 py-0.5 rounded-full flex-shrink-0">Unit {pdf.unit}</span>
+                                    <span className={`text-xs font-medium px-1.5 py-0.5 rounded-full flex-shrink-0 ${getGradeColorClasses(pdf.grade)}`}>{pdf.grade}</span>
+                                    <span className={`text-xs font-medium px-1.5 py-0.5 rounded-full flex-shrink-0 ${getUnitColorClasses(pdf.unit)}`}>Unit {pdf.unit}</span>
                                 </div>
                             ))
                         ) : (
