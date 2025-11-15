@@ -12,7 +12,7 @@ export interface LessonPlan {
   subject: string;
   materials: string[];
   activities: Activity[];
-  assessment: string;
+  homework: string;
 }
 
 export interface SLO {

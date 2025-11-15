@@ -81,13 +81,12 @@ const InputPanel: React.FC<InputPanelProps> = ({
   };
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-4 h-[700px]">
       <div>
         <div className="p-2 -mx-2 mb-2">
-            <h3 className="text-base font-semibold text-brand-text-light">Local Context Folder</h3>
         </div>
         <div className="p-3 bg-brand-bg rounded-lg">
-            <p className="text-sm text-brand-text-medium mb-3">Connect a local folder with your PDF curriculum. The app will automatically match files to SLOs by grade and unit from the filename.</p>
+            <p className="text-sm text-brand-text-medium mb-3">Upload Text Boooks To generate relevant LP.</p>
             <input
                 type="file"
                 webkitdirectory="true"
@@ -107,7 +106,7 @@ const InputPanel: React.FC<InputPanelProps> = ({
             {directoryName && (
                 <div className="mt-3">
                     <p className="text-xs text-brand-text-medium mb-2">Connected: <span className="font-mono bg-brand-bg p-1 rounded">{directoryName}</span></p>
-                    <div className="mt-2 max-h-48 overflow-y-auto custom-scrollbar pr-2 space-y-1">
+                    <div className="mt-2 max-h-100 overflow-y-auto custom-scrollbar pr-2 space-y-1">
                         {contextPdfs.length > 0 ? (
                             contextPdfs.sort((a,b) => a.name.localeCompare(b.name, undefined, {numeric: true})).map(pdf => (
                                 <div key={pdf.name} className="flex items-center gap-2 p-1.5 bg-brand-panel/50 rounded">
@@ -118,7 +117,7 @@ const InputPanel: React.FC<InputPanelProps> = ({
                                 </div>
                             ))
                         ) : (
-                            <p className="text-xs text-center text-brand-text-medium p-4">No valid PDF files found. Ensure filenames contain 'Grade [Number]' and 'Unit [Number]'.</p>
+                            <p className="text-xs text-center text-brand-text-medium p-4">Make sure pdf name contains Grade (#) and Unit (#)'.</p>
                         )}
                     </div>
                 </div>

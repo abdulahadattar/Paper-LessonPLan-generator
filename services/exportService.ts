@@ -140,8 +140,8 @@ const createDocxContentForPlan = (lessonPlan: LessonPlan): (Paragraph | Table)[]
       }));
       children.push(createRichParagraph(activity.description));
   });
-  children.push(createSectionHeading('ASSESSMENT'));
-  children.push(createRichParagraph(lessonPlan.assessment));
+  children.push(createSectionHeading('HOMEWORK ASSIGNMENT'));
+  children.push(createRichParagraph(lessonPlan.homework));
   return children;
 };
 
@@ -212,7 +212,12 @@ const createPdfContentForPlan = (lessonPlan: LessonPlan): any[] => {
         ])),
     ];
 
-    return [headerTable, ...resourcesSection, ...procedureSection];
+    const homeworkSection = [
+        { text: 'HOMEWORK ASSIGNMENT', style: 'sectionHeader' },
+        createPdfRichText(lessonPlan.homework),
+    ];
+
+    return [headerTable, ...resourcesSection, ...procedureSection, ...homeworkSection];
 };
 
 // --- SINGLE EXPORT FUNCTIONS ---

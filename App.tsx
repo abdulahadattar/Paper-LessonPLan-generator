@@ -712,14 +712,17 @@ const App: React.FC = () => {
                         ))}
                     </div>
                     <button 
-                        onClick={generateAllLessonPlans} 
-                        disabled={missingPdfSloIds.length > 0}
-                        className="bg-brand-primary text-white font-bold py-3 px-5 rounded-lg hover:bg-brand-primary-hover transition-all disabled:bg-brand-panel disabled:cursor-not-allowed flex items-center justify-center gap-2 text-base shadow-lg shadow-brand-primary/20 disabled:shadow-none"
+                        onClick={generateAllLessonPlans}
+                        className="bg-brand-primary text-white font-bold py-3 px-5 rounded-lg hover:bg-brand-primary-hover transition-all flex items-center justify-center gap-2 text-base shadow-lg shadow-brand-primary/20"
                     >
                       <WandIcon className="w-5 h-5" />
                       Generate ({selectedSloUniqueIds.length})
                     </button>
-                    {missingPdfSloIds.length > 0 && <p className="text-xs text-red-400 bg-brand-bg/80 backdrop-blur-sm px-2 py-1 rounded">Missing context PDFs for {missingPdfSloIds.length} SLO{missingPdfSloIds.length > 1 ? 's' : ''}.</p>}
+                    {missingPdfSloIds.length > 0 && (
+                        <p className="text-xs text-amber-400 bg-brand-bg/80 backdrop-blur-sm px-2 py-1 rounded text-center">
+                            Missing context for {missingPdfSloIds.length} SLO{missingPdfSloIds.length > 1 ? 's' : ''}.<br/>Generation quality may be affected.
+                        </p>
+                    )}
                 </div>
             )}
             

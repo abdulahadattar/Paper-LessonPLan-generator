@@ -16,8 +16,8 @@ function parseLessonPlanJson(jsonText: string, gradeLevel: string, subject: stri
         const parsed = JSON.parse(cleanJsonText);
 
         // Basic validation
-        if (!parsed.title || !parsed.objective || !Array.isArray(parsed.activities)) {
-            throw new Error("Parsed JSON is missing required fields (title, objective, activities).");
+        if (!parsed.title || !parsed.objective || !Array.isArray(parsed.activities) || !parsed.homework) {
+            throw new Error("Parsed JSON is missing required fields (title, objective, activities, homework).");
         }
 
         return {
@@ -56,14 +56,20 @@ export async function generateLessonPlan(
     gradeLevelContext = `${slo.grade} (Advanced)`;
   }
   
-  const systemInstruction = `You are an expert curriculum developer for ${gradeLevelContext} Physics. Your task is to generate a concise, 40-minute lesson plan as a JSON object.
+  const systemInstruction = `You are an expert curriculum developer for ${gradeLevelContext} Physics. Your task is to generate a concise, 40-minute lesson plan as a JSON object, strictly following the 4As framework.
 
 **Critical Instructions:**
 1.  **Strictly Grounded:** Your primary source of information is the attached PDF document. Base the entire lesson plan ONLY on the content found within this document, guided by the provided Student Learning Outcome (SLO). Use the other SLOs from the same unit for context on where this lesson fits.
-2.  **Deconstruct Topic & Pace:** Analyze the requested SLO to identify a focused sub-topic suitable for a single 40-minute lesson. The lesson plan must be granular and specific, not covering an entire broad chapter.
-3.  **MANDATORY JSON OUTPUT:** The output must ONLY be a valid JSON object matching the provided schema. Do not add any extra text, headers, or conversational markdown. The total duration of all activities must sum to exactly 40 minutes.
-4.  **Grade Appropriateness:** All content, activities, and assessments must be appropriate for the specified grade level: ${gradeLevelContext}.
-5.  **Activities:** The 'activities' array should contain four distinct objects representing a logical lesson flow: Activating Prior Knowledge, Acquiring New Knowledge, Applying Knowledge, and Assessment.
+2.  **Deconstruct Topic & Pace:** Analyze the requested SLO to identify a focused sub-topic suitable for a single 40-minute lesson. The plan must be granular and specific, not a broad overview of a chapter.
+3.  **Mandatory 4As Structure:** The lesson must follow the 4As activity-based learning model. The 'activities' array must contain exactly four objects with these specific names:
+    - **'Activating Prior Knowledge'**: Engage students and connect to past learning.
+    - **'Acquiring New Knowledge'**: Introduce new concepts, grounded in the provided PDF.
+    - **'Applying Knowledge'**: A practical, hands-on activity for students to use the new knowledge.
+    - **'Assessing Knowledge'**: A brief assessment to check for understanding of the SLO. This activity is the sole assessment component within the lesson procedure.
+4.  **Timings:** The total duration of all activities must sum to exactly 40 minutes.
+5.  **Homework:** Provide a meaningful homework assignment that reinforces the lesson's objective.
+6.  **MANDATORY JSON OUTPUT:** The output must ONLY be a valid JSON object matching the provided schema. Do not add any extra text, headers, or conversational markdown.
+7.  **Grade Appropriateness:** All content must be appropriate for ${gradeLevelContext}.
 `;
 
   const lessonPlanSchema = {
@@ -84,7 +90,7 @@ export async function generateLessonPlan(
         },
         activities: {
             type: Type.ARRAY,
-            description: "An array of four activities that structure the lesson.",
+            description: "An array of four activities that structure the lesson according to the 4As framework (Activating, Acquiring, Applying, Assessing).",
             items: {
                 type: Type.OBJECT,
                 properties: {
@@ -95,12 +101,12 @@ export async function generateLessonPlan(
                 required: ['name', 'duration', 'description'],
             },
         },
-        assessment: {
+        homework: {
             type: Type.STRING,
-            description: "A description of the assessment activity, which should be the same as the description of the final activity in the 'activities' array.",
-         },
+            description: "A brief but meaningful homework assignment that reinforces the lesson's objective."
+        }
     },
-    required: ['title', 'objective', 'materials', 'activities', 'assessment'],
+    required: ['title', 'objective', 'materials', 'activities', 'homework'],
   };
 
   const contextText = unitSlos
@@ -124,7 +130,7 @@ Use the attached PDF as the primary reference for content, examples, and activit
     }
 
     const response = await ai.models.generateContent({
-      model: 'gemini-flash-lite-latest',
+      model: 'gemini-2.5-flash',
       contents: { parts },
       config: {
         systemInstruction: systemInstruction,
