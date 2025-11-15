@@ -29,6 +29,7 @@ type ExportOption = 'individual' | 'byUnit' | 'byGrade' | 'all';
 // --- SloPanel Component ---
 interface SloPanelProps {
   unitsByGrade: UnitsByGrade;
+  allSlos: SLO[];
   selectedSloUniqueIds: string[];
   setSelectedSloUniqueIds: React.Dispatch<React.SetStateAction<string[]>>;
   isParsing: boolean;
@@ -73,7 +74,7 @@ const getUnitAccentColor = (unitName: string): string => {
 };
 
 
-const SloPanel: React.FC<SloPanelProps> = ({ unitsByGrade, selectedSloUniqueIds, setSelectedSloUniqueIds, isParsing, onClearSelection, missingPdfSloIds }) => {
+const SloPanel: React.FC<SloPanelProps> = ({ unitsByGrade, allSlos, selectedSloUniqueIds, setSelectedSloUniqueIds, isParsing, onClearSelection, missingPdfSloIds }) => {
   const [searchQuery, setSearchQuery] = useState('');
 
   const filteredUnitsByGrade = useMemo(() => {
@@ -157,19 +158,37 @@ const SloPanel: React.FC<SloPanelProps> = ({ unitsByGrade, selectedSloUniqueIds,
       />
     );
   };
+
+  const SkeletonLoader: React.FC = () => (
+    <div className="h-full flex flex-col custom-scrollbar animate-pulse">
+        <div className="flex-shrink-0 px-4 pt-4">
+            <div className="h-8 bg-brand-surface rounded w-3/4 mb-2"></div>
+            <div className="h-4 bg-brand-surface rounded w-1/2 mb-4"></div>
+            <div className="h-10 bg-brand-surface rounded w-full"></div>
+        </div>
+        <div className="flex-grow overflow-y-auto custom-scrollbar px-4 pb-32 mt-4 space-y-6">
+            {[...Array(3)].map((_, i) => (
+                <div key={i}>
+                    <div className="h-8 bg-brand-surface rounded w-1/4 mb-4"></div>
+                    <div className="space-y-2 mt-2 pl-4 border-l-2 border-brand-panel">
+                        {[...Array(2)].map((_, j) => (
+                            <div key={j} className="bg-brand-surface/50 rounded-r-lg p-3">
+                                <div className="h-6 bg-brand-surface rounded w-1/3 mb-4"></div>
+                                <div className="pl-14 pr-4 pb-1">
+                                    <div className="h-4 bg-brand-surface rounded w-full mb-2"></div>
+                                    <div className="h-4 bg-brand-surface rounded w-3/4"></div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            ))}
+        </div>
+    </div>
+);
   
   if (isParsing) {
-    return (
-      <div className="w-full h-full flex items-center justify-center">
-        <div className="text-center">
-          <svg className="animate-spin h-8 w-8 text-brand-primary mx-auto mb-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-          </svg>
-          <p className="text-brand-text-medium">Loading curriculum data...</p>
-        </div>
-      </div>
-    );
+    return <SkeletonLoader />;
   }
 
   const hasSlos = Object.keys(unitsByGrade).length > 0;
@@ -179,24 +198,47 @@ const SloPanel: React.FC<SloPanelProps> = ({ unitsByGrade, selectedSloUniqueIds,
       <div className="flex-shrink-0 px-4 pt-4">
         <div className="flex justify-between items-center mb-1">
           <h2 className="text-xl font-bold text-brand-text-light">Student Learning Outcomes (SLOs)</h2>
-          {selectedSloUniqueIds.length > 0 && (
+          <div className="flex items-center gap-4">
+            {selectedSloUniqueIds.length > 0 && (
+              <button
+                onClick={onClearSelection}
+                className="text-xs font-semibold text-brand-primary hover:underline"
+              >
+                Clear selection
+              </button>
+            )}
             <button
-              onClick={onClearSelection}
+              onClick={() => {
+                const allSloIds = allSlos.map(slo => slo.uniqueId!);
+                const allSelected = allSloIds.length === selectedSloUniqueIds.length;
+                setSelectedSloUniqueIds(allSelected ? [] : allSloIds);
+              }}
               className="text-xs font-semibold text-brand-primary hover:underline"
             >
-              Clear selection
+              {allSlos.length === selectedSloUniqueIds.length ? 'Deselect All' : 'Select All'}
             </button>
-          )}
+          </div>
         </div>
         <p className="text-sm text-brand-text-medium">Select SLOs to generate lesson plans.</p>
         {hasSlos && (
-             <input
-                type="text"
-                placeholder="Search by SLO ID or text..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full mt-3 p-2 h-10 bg-brand-bg border border-brand-border rounded-md focus:ring-2 focus:ring-brand-primary focus:border-brand-primary outline-none text-sm"
-             />
+            <div className="relative mt-3">
+                <input
+                    type="text"
+                    placeholder="Search by SLO ID or text..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full p-2 h-10 bg-brand-bg border border-brand-border rounded-md focus:ring-2 focus:ring-brand-primary focus:border-brand-primary outline-none text-sm pr-8"
+                />
+                {searchQuery && (
+                    <button
+                        onClick={() => setSearchQuery('')}
+                        className="absolute inset-y-0 right-0 flex items-center pr-3 text-brand-text-medium hover:text-brand-text-light"
+                        aria-label="Clear search"
+                    >
+                        <CloseIcon className="w-5 h-5" />
+                    </button>
+                )}
+            </div>
         )}
       </div>
 
@@ -208,9 +250,9 @@ const SloPanel: React.FC<SloPanelProps> = ({ unitsByGrade, selectedSloUniqueIds,
               return (
                 <details key={grade} open>
                   {/* Grade Header */}
-                  <summary className="flex items-center gap-4 px-1 py-2 cursor-pointer">
+                  <summary className="sticky top-0 bg-brand-bg/80 backdrop-blur-sm z-10 flex items-center gap-4 px-1 py-2 cursor-pointer">
                       <ParentCheckbox slos={allSlosInGrade} onToggle={handleGradeSelection} />
-                      <h3 className="font-bold text-xl text-brand-text-light tracking-wide flex-1">{grade}</h3>
+                      <h3 className="font-bold text-2xl text-brand-text-light tracking-wide flex-1">{grade}</h3>
                   </summary>
                   
                   {/* Units Container */}
@@ -222,7 +264,7 @@ const SloPanel: React.FC<SloPanelProps> = ({ unitsByGrade, selectedSloUniqueIds,
                       }).map(([unitName, slos]) => (
                           <details key={unitName} open className="bg-brand-surface rounded-r-lg shadow-sm overflow-hidden group">
                               <summary 
-                                  className="cursor-pointer font-semibold p-3 flex items-center gap-4 text-brand-text-light/95 hover:bg-slate-700/50 transition-colors"
+                                  className="sticky top-12 cursor-pointer font-semibold p-3 flex items-center gap-4 text-brand-text-light/95 hover:bg-slate-700/50 transition-colors bg-brand-surface z-5"
                                   style={{ borderLeft: `4px solid ${getUnitAccentColor(unitName)}` }}
                               >
                                   <ParentCheckbox slos={slos} onToggle={handleUnitSelection} />
@@ -231,7 +273,7 @@ const SloPanel: React.FC<SloPanelProps> = ({ unitsByGrade, selectedSloUniqueIds,
                               
                               <div className="pl-14 pr-4 pb-1 bg-brand-bg/30">
                                   {slos.map(slo => (
-                                      <div key={slo.uniqueId} className="flex items-start gap-3 py-4 border-t border-brand-border/80">
+                                      <div key={slo.uniqueId} className="flex items-start gap-3 py-4 border-t border-brand-border/80 hover:bg-brand-surface/50 rounded-lg px-2 transition-colors duration-150">
                                           <input
                                               type="checkbox"
                                               checked={selectedSloUniqueIds.includes(slo.uniqueId!)}
@@ -687,7 +729,7 @@ const App: React.FC = () => {
 
   return (
     <div className="flex h-screen bg-brand-bg text-brand-text-light font-sans">
-      <aside className={`bg-brand-surface flex flex-col transition-all duration-300 ${isSidebarOpen ? 'w-full md:w-[260px]' : 'w-0'} overflow-hidden`}>
+      <aside className={`bg-brand-surface flex flex-col transition-all duration-300 ${isSidebarOpen ? 'w-full md:w-[260px]' : 'w-0'} overflow-hidden border-r border-brand-border/50`}>
           <div className="p-4 flex-grow flex flex-col min-w-[260px]">
             <div className="flex justify-between items-center mb-4 flex-shrink-0">
                 <div className="flex items-center gap-2">
@@ -715,7 +757,7 @@ const App: React.FC = () => {
           </div>
       </aside>
 
-      <main className="flex-1 flex flex-col overflow-hidden">
+      <main className="flex-1 flex flex-col overflow-hidden bg-brand-bg">
         <Header directoryName={directoryName} />
         {!isSidebarOpen && (
             <button 
@@ -726,9 +768,10 @@ const App: React.FC = () => {
                 <MenuIcon className="w-6 h-6" />
             </button>
         )}
-        <div className="flex-1 relative bg-brand-surface rounded-tl-2xl shadow-inner-lg overflow-hidden">
+        <div className="flex-1 relative bg-brand-bg rounded-tl-2xl shadow-inner-lg overflow-hidden">
             <SloPanel 
               unitsByGrade={unitsByGrade}
+              allSlos={allSlos}
               selectedSloUniqueIds={selectedSloUniqueIds}
               setSelectedSloUniqueIds={setSelectedSloUniqueIds}
               isParsing={isParsing}
