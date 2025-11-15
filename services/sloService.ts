@@ -7,10 +7,10 @@ import { SLO } from '../types';
  */
 export async function loadInitialSlos(): Promise<SLO[]> {
   const gradeFiles = [
-    { grade: 'Grade 9', path: './SLOschema/Grade_9.json' },
-    { grade: 'Grade 10', path: './SLOschema/Grade_10.json' },
-    { grade: 'Grade 11', path: './SLOschema/Grade_11.json' },
-    { grade: 'Grade 12', path: './SLOschema/Grade_12.json' },
+    { grade: 'Grade 9', path: '/SLOschema/Grade_9.json' },
+    { grade: 'Grade 10', path: '/SLOschema/Grade_10.json' },
+    { grade: 'Grade 11', path: '/SLOschema/Grade_11.json' },
+    { grade: 'Grade 12', path: '/SLOschema/Grade_12.json' },
   ];
   
   const parsedSloArrays = await Promise.all(
