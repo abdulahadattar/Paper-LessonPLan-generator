@@ -106,7 +106,7 @@ const createHeaderRun = (text: string, bold: boolean = false, size: number = 20)
 
 const createDocxContentForPlan = (lessonPlan: LessonPlan): (Paragraph | Table)[] => {
   const teacherName = "Abdul Ahad"; 
-  const schoolPlaceholder = "EDUCATIONAL INSTITUTION NAME"; 
+  const schoolPlaceholder = "Peoples Higher Secondary School Jamshoro"; 
   const dateTimeline = '____________________'; 
   const period = '1';
   const gradeShort = lessonPlan.gradeLevel.replace('Grade ', '').split(' ')[0];
@@ -201,7 +201,7 @@ const createPdfRichText = (text: string) => ({ text: parseTextForPdf(text), styl
 
 const createPdfContentForPlan = (lessonPlan: LessonPlan): any[] => {
     const teacherName = "Abdul Ahad";
-    const schoolPlaceholder = "EDUCATIONAL INSTITUTION NAME";
+    const schoolPlaceholder = "Peoples Higher Secondary School Jamshoro";
     const dateTimeline = '____________________';
     const period = '1';
     const gradeShort = lessonPlan.gradeLevel.replace('Grade ', '').split(' ')[0];
