@@ -18,6 +18,28 @@ import { LessonPlan, Activity } from '../types';
 // Declaration for pdfmake, which is loaded via a script tag in index.html
 declare const pdfMake: any;
 
+// Define a custom table layout for the lesson plan header
+if (typeof pdfMake !== 'undefined' && pdfMake.tableLayouts) {
+  pdfMake.tableLayouts.lessonPlanHeader = {
+    hLineWidth: function (i: number, node: any) {
+      if (i === 0 || i === node.table.body.length) return 1.5; // Outer top & bottom border
+      if (i === 1) return 1.5; // Thicker line under main title
+      return 1; // All other horizontal lines
+    },
+    vLineWidth: function (i: number, node: any) {
+      if (i === 0 || i === node.table.widths.length) return 1.5; // Outer left & right
+      return 1; // Inner vertical lines
+    },
+    hLineColor: function () { return '#000000'; },
+    vLineColor: function () { return '#000000'; },
+    paddingLeft: function() { return 5; },
+    paddingRight: function() { return 5; },
+    paddingTop: function() { return 4; },
+    paddingBottom: function() { return 4; }
+  };
+}
+
+
 // --- UTILITY FUNCTIONS ---
 
 export const formatFileName = (title: string, sloId?: string): string => {
@@ -181,19 +203,29 @@ const createPdfContentForPlan = (lessonPlan: LessonPlan): any[] => {
     const teacherName = "Abdul Ahad";
     const schoolPlaceholder = "EDUCATIONAL INSTITUTION NAME";
     const dateTimeline = '____________________';
-    const period = '__';
+    const period = '1';
     const gradeShort = lessonPlan.gradeLevel.split(' ')[0];
 
     const headerTable = {
-        layout: 'lightHorizontalLines',
+        layout: 'lessonPlanHeader', // Use the custom layout
         table: {
-            widths: ['*', '*', '*', '*'],
+            widths: ['auto', '*', 'auto', '*'],
             body: [
+                // Row 1: Title
                 [{ colSpan: 4, text: `${schoolPlaceholder}\nDAILY LESSON PLAN`, style: 'headerTableTitle' }, {}, {}, {}],
-                [{ text: `GRADE: ${gradeShort}`, style: 'headerTableBody' }, { text: `SUBJECT: ${lessonPlan.subject}`, style: 'headerTableBody' }, { text: `PERIODS: ${period}`, style: 'headerTableBody' }, { text: `DATE/TIMELINE: ${dateTimeline}`, style: 'headerTableBody' }],
-                [{ colSpan: 4, text: `LESSON TOPIC: ${lessonPlan.title}`, style: 'headerTableBody' }, {}, {}, {}],
-                [{ colSpan: 4, text: `LEARNING OBJECTIVE: ${lessonPlan.objective}`, style: 'headerTableBody' }, {}, {}, {}],
-                [{ colSpan: 4, text: `TEACHER: ${teacherName}`, style: 'headerTableBody' }, {}, {}, {}],
+                // Row 2: Grade, Subject, etc.
+                [
+                    { text: [{ text: 'GRADE: ', bold: true }, gradeShort], style: 'headerTableSub' }, 
+                    { text: [{ text: 'SUBJECT: ', bold: true }, { text: lessonPlan.subject, bold: true }], style: 'headerTableSub' }, 
+                    { text: [{ text: 'PERIODS: ', bold: true }, { text: period, bold: true }], style: 'headerTableSub' }, 
+                    { text: [{ text: 'DATE/TIMELINE: ', bold: true }, dateTimeline], style: 'headerTableSub' }
+                ],
+                // Row 3: Topic
+                [{ colSpan: 4, text: [{ text: 'LESSON TOPIC: ', bold: true }, lessonPlan.title], style: 'headerTableBody' }, {}, {}, {}],
+                // Row 4: Objective
+                [{ colSpan: 4, text: [{ text: 'LEARNING OBJECTIVE: ', bold: true }, lessonPlan.objective], style: 'headerTableBody' }, {}, {}, {}],
+                // Row 5: Teacher
+                [{ colSpan: 4, text: [{ text: 'TEACHER: ', bold: true }, { text: teacherName, bold: true }], style: 'headerTableBody' }, {}, {}, {}],
             ]
         },
         margin: [0, 0, 0, 10] 
@@ -244,7 +276,8 @@ export const exportAsPdf = async (lessonPlan: LessonPlan, sloId?: string): Promi
         content: content,
         styles: {
             headerTableTitle: { fontSize: 14, bold: true, alignment: 'center', margin: [0, 2, 0, 2] },
-            headerTableBody: { fontSize: 9, bold: true, alignment: 'left' },
+            headerTableSub: { fontSize: 9, alignment: 'left' },
+            headerTableBody: { fontSize: 9, alignment: 'left' },
             sectionHeader: { fontSize: 12, bold: true, color: '#1F4E79', margin: [0, 15, 0, 5], decoration: 'underline', decorationColor: '#1F4E79' },
             body: { fontSize: 10, lineHeight: 1.2, alignment: 'justify' },
         },
@@ -284,7 +317,8 @@ export const exportMultipleLessonsAsPdf = async (lessonPlans: LessonPlan[], file
         content: allContent,
         styles: {
             headerTableTitle: { fontSize: 14, bold: true, alignment: 'center', margin: [0, 2, 0, 2] },
-            headerTableBody: { fontSize: 9, bold: true, alignment: 'left' },
+            headerTableSub: { fontSize: 9, alignment: 'left' },
+            headerTableBody: { fontSize: 9, alignment: 'left' },
             sectionHeader: { fontSize: 12, bold: true, color: '#1F4E79', margin: [0, 15, 0, 5], decoration: 'underline', decorationColor: '#1F4E79' },
             body: { fontSize: 10, lineHeight: 1.2, alignment: 'justify' },
         },
