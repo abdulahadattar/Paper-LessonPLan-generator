@@ -1,3 +1,4 @@
+
 import { GoogleGenAI, Part, Type } from "@google/genai";
 import { Activity, LessonPlan, SLO } from '../types';
 
@@ -39,7 +40,7 @@ function parseLessonPlanJson(jsonText: string, gradeLevel: string, subject: stri
 export async function generateLessonPlan(
     slo: SLO, 
     unitSlos: SLO[],
-    contextFilePart?: Part
+    contextFileParts?: Part[]
 ): Promise<LessonPlan> {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
 
@@ -59,7 +60,7 @@ export async function generateLessonPlan(
   const systemInstruction = `You are an expert curriculum developer for ${gradeLevelContext} Physics. Your task is to generate a concise, 40-minute lesson plan as a JSON object, strictly following the 4As framework.
 
 **Critical Instructions:**
-1.  **Strictly Grounded:** Your primary source of information is the attached PDF document. Base the entire lesson plan ONLY on the content found within this document, guided by the provided Student Learning Outcome (SLO). Use the other SLOs from the same unit for context on where this lesson fits.
+1.  **Strictly Grounded:** Your primary source of information is the attached PDF document(s). Base the entire lesson plan ONLY on the content found within these documents, guided by the provided Student Learning Outcome (SLO). Use the other SLOs from the same unit for context on where this lesson fits.
 2.  **Deconstruct Topic & Pace:** Analyze the requested SLO to identify a focused sub-topic suitable for a single 40-minute lesson. The plan must be granular and specific, not a broad overview of a chapter.
 3.  **Mandatory 4As Structure:** The lesson must follow the 4As activity-based learning model. The 'activities' array must contain exactly four objects with these specific names:
     - **'Activating Prior Knowledge'**: Engage students and connect to past learning.
@@ -120,13 +121,13 @@ export async function generateLessonPlan(
 For context, here are other SLOs from the same unit:
 ${contextText || 'None'}
 
-Use the attached PDF as the primary reference for content, examples, and activities.
+Use the attached PDF(s) as the primary reference for content, examples, and activities.
 `;
 
   try {
     const parts: Part[] = [{ text: userPrompt }];
-    if (contextFilePart) {
-        parts.unshift(contextFilePart); // Put PDF first for better context
+    if (contextFileParts && contextFileParts.length > 0) {
+        parts.unshift(...contextFileParts); // Put PDF(s) first for better context
     }
 
     const response = await ai.models.generateContent({

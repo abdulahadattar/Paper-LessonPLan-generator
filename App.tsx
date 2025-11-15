@@ -9,6 +9,8 @@ import { FileIcon } from './components/icons/FileIcon';
 import { WandIcon } from './components/icons/WandIcon';
 import { exportAsPdf, exportAsDocx, formatFileName, exportMultipleLessonsAsDocx, exportMultipleLessonsAsPdf } from './services/exportService';
 import { Part } from '@google/genai';
+import { getRemotePdfs } from './services/remoteContextService';
+
 
 interface UnitsByGrade {
   [grade: string]: GroupedSlos;
@@ -18,7 +20,8 @@ interface ContextPdf {
     name: string;
     grade: string;
     unit: string;
-    file: File;
+    file?: File;
+    url?: string;
 }
 
 type ExportOption = 'individual' | 'byUnit' | 'byGrade' | 'all';
@@ -383,10 +386,11 @@ const App: React.FC = () => {
   const [isComplete, setIsComplete] = useState<boolean>(false);
   const [exportOption, setExportOption] = useState<ExportOption>('individual');
   const isCancelledRef = useRef(false);
+  const partCache = useRef(new Map<string, Promise<Part>>());
 
   const [directoryName, setDirectoryName] = useState<string | null>(null);
-  const [directoryFiles, setDirectoryFiles] = useState<File[]>([]);
   const [contextPdfs, setContextPdfs] = useState<ContextPdf[]>([]);
+  const [isOnlineLoading, setIsOnlineLoading] = useState(false);
 
 
   useEffect(() => {
@@ -413,29 +417,6 @@ const App: React.FC = () => {
     };
     fetchInitialSlos();
   }, []);
-  
-  useEffect(() => {
-    const processDirectoryFiles = () => {
-      if (directoryFiles.length === 0) {
-        setContextPdfs([]);
-        return;
-      }
-      const pdfs: ContextPdf[] = [];
-      for (const file of directoryFiles) {
-        if (file.name.toLowerCase().endsWith('.pdf')) {
-          const gradeMatch = file.name.match(/Grade (\d+)/i);
-          const unitMatch = file.name.match(/Unit (\d+)/i);
-          if (gradeMatch && unitMatch) {
-            const grade = `Grade ${gradeMatch[1]}`;
-            const unit = unitMatch[1];
-            pdfs.push({ name: file.name, grade, unit, file });
-          }
-        }
-      }
-      setContextPdfs(pdfs);
-    };
-    processDirectoryFiles();
-  }, [directoryFiles]);
   
   const missingPdfSloIds = useMemo(() => {
     const selectedSlos = allSlos.filter(slo => selectedSloUniqueIds.includes(slo.uniqueId!));
@@ -471,12 +452,29 @@ const App: React.FC = () => {
   };
 
   const generateAllLessonPlans = async () => {
+    partCache.current.clear();
     isCancelledRef.current = false;
     setIsLoading(true);
     setIsComplete(false);
     setLogMessages(['Starting lesson plan generation...']);
     const selectedSlos = allSlos.filter(slo => selectedSloUniqueIds.includes(slo.uniqueId!));
     let wasCancelled = false;
+    
+    const urlToPart = async (url: string, name: string): Promise<Part> => {
+        if (partCache.current.has(url)) {
+            return partCache.current.get(url)!;
+        }
+        const promise = (async () => {
+            const response = await fetch(url);
+            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+            const blob = await response.blob();
+            const file = new File([blob], name, { type: 'application/pdf' });
+            return fileToPart(file);
+        })();
+        partCache.current.set(url, promise);
+        return promise;
+    };
+
 
     const processSlo = async (slo: SLO): Promise<LessonPlan | null> => {
         const MAX_RETRIES = 1; // 1 initial try + 1 retry = 2 total attempts
@@ -487,12 +485,27 @@ const App: React.FC = () => {
                     setLogMessages(prev => [...prev, `Retrying generation for ${slo.SLO_ID}...`]);
                 }
                 const unitContextSlos = selectedSlos.filter(s => s.grade === slo.grade && s.Unit_Name === slo.Unit_Name);
-                const contextPdf = contextPdfs.find(p => p.grade === slo.grade && parseInt(p.unit, 10) === parseInt(slo.Unit_Number, 10));
+                const contextPdfsForSlo = contextPdfs.filter(p => p.grade === slo.grade && parseInt(p.unit, 10) === parseInt(slo.Unit_Number, 10));
                 
-                let contextFilePart: Part | undefined;
-                if (contextPdf) {
-                    if (attempt === 0) setLogMessages(prev => [...prev, `Found context file: ${contextPdf.name}`]);
-                    contextFilePart = await fileToPart(contextPdf.file);
+                const contextFileParts: Part[] = [];
+                if (contextPdfsForSlo.length > 0) {
+                    if (attempt === 0) setLogMessages(prev => [...prev, `Found context file(s): ${contextPdfsForSlo.map(p => p.name).join(', ')}`]);
+                    
+                    for (const pdf of contextPdfsForSlo) {
+                        try {
+                            let part: Part | undefined;
+                            if (pdf.file) {
+                                part = await fileToPart(pdf.file);
+                            } else if (pdf.url) {
+                                part = await urlToPart(pdf.url, pdf.name);
+                            }
+                            if (part) contextFileParts.push(part);
+                        } catch (e) {
+                            const errorMsg = `Failed to load context PDF ${pdf.name}. Generation may be less accurate.`;
+                            console.error(errorMsg, e);
+                            setLogMessages(prev => [...prev, `WARN: ${errorMsg}`]);
+                        }
+                    }
                 } else {
                     if (attempt === 0) {
                         const warningMsg = `No context PDF found for SLO ${slo.SLO_ID}. Generation may be less accurate.`;
@@ -502,7 +515,7 @@ const App: React.FC = () => {
                 }
                 
                 if (attempt === 0) setLogMessages(prev => [...prev, `Generating lesson plan content...`]);
-                const plan = await generateLessonPlan(slo, unitContextSlos, contextFilePart);
+                const plan = await generateLessonPlan(slo, unitContextSlos, contextFileParts);
                 setLogMessages(prev => [...prev, `Content received for "${plan.title}"`]);
                 return plan;
             } catch (error) {
@@ -614,12 +627,37 @@ const App: React.FC = () => {
         const rootDir = firstPath.split('/')[0];
         setDirectoryName(rootDir);
       } else {
-        // Fallback for browsers that don't provide webkitRelativePath
         setDirectoryName("Selected Folder");
       }
-      setDirectoryFiles(fileArray);
+
+      const pdfs: ContextPdf[] = [];
+      for (const file of fileArray) {
+        if (file.name.toLowerCase().endsWith('.pdf')) {
+          const gradeMatch = file.name.match(/Grade (\d+)/i);
+          const unitMatch = file.name.match(/Unit (\d+)/i);
+          if (gradeMatch && unitMatch) {
+            const grade = `Grade ${gradeMatch[1]}`;
+            const unit = unitMatch[1];
+            pdfs.push({ name: file.name, grade, unit, file });
+          }
+        }
+      }
+      setContextPdfs(pdfs);
     }
   };
+
+  const handleLoadOnlineBooks = useCallback(async () => {
+    setIsOnlineLoading(true);
+    const remotePdfs = getRemotePdfs();
+    setContextPdfs(remotePdfs.map(p => ({
+        name: p.name,
+        grade: p.grade,
+        unit: p.unit,
+        url: p.url,
+    })));
+    setDirectoryName("Online Textbooks");
+    setIsOnlineLoading(false);
+  }, []);
 
   const displayablePdfs = useMemo(() => 
     contextPdfs.map(({ name, grade, unit }) => ({ name, grade, unit })), 
@@ -661,6 +699,8 @@ const App: React.FC = () => {
             <div className="overflow-y-auto custom-scrollbar flex-grow -mr-2 pr-2">
                 <InputPanel
                     onDirectorySelected={handleDirectorySelected}
+                    onLoadOnlineBooks={handleLoadOnlineBooks}
+                    isOnlineLoading={isOnlineLoading}
                     directoryName={directoryName}
                     contextPdfs={displayablePdfs}
                 />
