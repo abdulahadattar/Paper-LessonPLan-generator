@@ -57,7 +57,7 @@ export async function generateLessonPlan(
     gradeLevelContext = `${slo.grade} (Advanced)`;
   }
   
-  const systemInstruction = `You are an expert curriculum developer for ${gradeLevelContext} Physics. Your task is to generate a concise, 40-minute lesson plan as a JSON object, strictly following the 4As framework.
+  const systemInstruction = `You are a Physics Teacher and an expert curriculum developer for ${gradeLevelContext} Physics. Your task is to generate a concise, 40-minute lesson plan as a JSON object, strictly following the 4As framework dont talk or explain or comunicate in the lesson.
 
 **Critical Instructions:**
 1.  **Strictly Grounded:** Your primary source of information is the attached PDF document(s). Base the entire lesson plan ONLY on the content found within these documents, guided by the provided Student Learning Outcome (SLO). Use the other SLOs from the same unit for context on where this lesson fits.

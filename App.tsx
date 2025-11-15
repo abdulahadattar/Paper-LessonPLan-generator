@@ -366,7 +366,7 @@ const Header: React.FC<{ directoryName: string | null; }> = ({ directoryName }) 
         </div>
         <div className="flex items-center gap-2 text-sm">
           <div className="w-2.5 h-2.5 rounded-full" style={{backgroundColor: directoryName ? '#22c55e' : '#f59e0b'}}></div>
-          <span className="text-brand-text-medium hidden sm:block">{directoryName ? `Connected: ${directoryName}` : 'No Folder Connected'}</span>
+          <span className="text-brand-text-medium hidden sm:block">{directoryName ? `Context: ${directoryName}` : 'No Context Loaded'}</span>
         </div>
       </header>
     );
@@ -390,14 +390,13 @@ const App: React.FC = () => {
 
   const [directoryName, setDirectoryName] = useState<string | null>(null);
   const [contextPdfs, setContextPdfs] = useState<ContextPdf[]>([]);
-  const [isOnlineLoading, setIsOnlineLoading] = useState(false);
-
 
   useEffect(() => {
-    const fetchInitialSlos = async () => {
+    const fetchInitialData = async () => {
         setIsParsing(true);
-        const parsedSlos = await loadInitialSlos();
         
+        // Load SLOs
+        const parsedSlos = await loadInitialSlos();
         const slosWithUniqueIds = parsedSlos.map((slo, index) => ({
             ...slo,
             uniqueId: `${slo.SLO_ID}_${index}`
@@ -413,9 +412,20 @@ const App: React.FC = () => {
             return acc;
         }, {});
         setUnitsByGrade(grouped);
+        
+        // Load remote PDFs by default
+        const remotePdfs = getRemotePdfs();
+        setContextPdfs(remotePdfs.map(p => ({
+            name: p.name,
+            grade: p.grade,
+            unit: p.unit,
+            url: p.url,
+        })));
+        setDirectoryName("Online Textbooks");
+
         setIsParsing(false);
     };
-    fetchInitialSlos();
+    fetchInitialData();
   }, []);
   
   const missingPdfSloIds = useMemo(() => {
@@ -465,8 +475,12 @@ const App: React.FC = () => {
             return partCache.current.get(url)!;
         }
         const promise = (async () => {
-            const response = await fetch(url);
-            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+            // Using a CORS proxy to bypass fetch restrictions from the browser
+            const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(url)}`;
+            const response = await fetch(proxyUrl);
+            if (!response.ok) {
+                throw new Error(`Failed to fetch ${name}. Status: ${response.status} ${response.statusText}`);
+            }
             const blob = await response.blob();
             const file = new File([blob], name, { type: 'application/pdf' });
             return fileToPart(file);
@@ -501,8 +515,9 @@ const App: React.FC = () => {
                             }
                             if (part) contextFileParts.push(part);
                         } catch (e) {
-                            const errorMsg = `Failed to load context PDF ${pdf.name}. Generation may be less accurate.`;
-                            console.error(errorMsg, e);
+                            const errorDetails = e instanceof Error ? e.message : String(e);
+                            const errorMsg = `Failed to load context PDF ${pdf.name}. Generation may be less accurate. Details: ${errorDetails}`;
+                            console.error(`Error loading ${pdf.name}`, e);
                             setLogMessages(prev => [...prev, `WARN: ${errorMsg}`]);
                         }
                     }
@@ -646,19 +661,6 @@ const App: React.FC = () => {
     }
   };
 
-  const handleLoadOnlineBooks = useCallback(async () => {
-    setIsOnlineLoading(true);
-    const remotePdfs = getRemotePdfs();
-    setContextPdfs(remotePdfs.map(p => ({
-        name: p.name,
-        grade: p.grade,
-        unit: p.unit,
-        url: p.url,
-    })));
-    setDirectoryName("Online Textbooks");
-    setIsOnlineLoading(false);
-  }, []);
-
   const displayablePdfs = useMemo(() => 
     contextPdfs.map(({ name, grade, unit }) => ({ name, grade, unit })), 
   [contextPdfs]);
@@ -699,8 +701,6 @@ const App: React.FC = () => {
             <div className="overflow-y-auto custom-scrollbar flex-grow -mr-2 pr-2">
                 <InputPanel
                     onDirectorySelected={handleDirectorySelected}
-                    onLoadOnlineBooks={handleLoadOnlineBooks}
-                    isOnlineLoading={isOnlineLoading}
                     directoryName={directoryName}
                     contextPdfs={displayablePdfs}
                 />
@@ -709,9 +709,9 @@ const App: React.FC = () => {
           <div className="p-4 border-t border-brand-border text-xs text-brand-text-medium text-center flex-shrink-0">
              <div className="flex items-center justify-center gap-2 mb-2">
                 <InfoIcon className="w-4 h-4"/>
-                <p>Grounds lesson plans using local PDF curriculum files.</p>
+                <p>Grounds lesson plans using PDF curriculum files.</p>
              </div>
-             <span>Created by Abdul Ahad | v1.2</span>
+             <span>Created by Abdul Ahad | v1.3</span>
           </div>
       </aside>
 

@@ -109,7 +109,7 @@ const createDocxContentForPlan = (lessonPlan: LessonPlan): (Paragraph | Table)[]
   const schoolPlaceholder = "EDUCATIONAL INSTITUTION NAME"; 
   const dateTimeline = '____________________'; 
   const period = '1';
-  const gradeShort = lessonPlan.gradeLevel.split(' ')[0];
+  const gradeShort = lessonPlan.gradeLevel.replace('Grade ', '').split(' ')[0];
   
   const headerTable = new Table({
       width: { size: 100, type: WidthType.PERCENTAGE },
@@ -204,7 +204,7 @@ const createPdfContentForPlan = (lessonPlan: LessonPlan): any[] => {
     const schoolPlaceholder = "EDUCATIONAL INSTITUTION NAME";
     const dateTimeline = '____________________';
     const period = '1';
-    const gradeShort = lessonPlan.gradeLevel.split(' ')[0];
+    const gradeShort = lessonPlan.gradeLevel.replace('Grade ', '').split(' ')[0];
 
     const headerTable = {
         layout: 'lessonPlanHeader', // Use the custom layout

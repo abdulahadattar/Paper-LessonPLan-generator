@@ -22,8 +22,6 @@ interface ContextPdfForDisplay {
 
 interface InputPanelProps {
   onDirectorySelected: (files: FileList) => void;
-  onLoadOnlineBooks: () => void;
-  isOnlineLoading: boolean;
   directoryName: string | null;
   contextPdfs: ContextPdfForDisplay[];
 }
@@ -68,8 +66,6 @@ const getUnitColorClasses = (unit: string): string => {
 
 const InputPanel: React.FC<InputPanelProps> = ({ 
     onDirectorySelected,
-    onLoadOnlineBooks,
-    isOnlineLoading,
     directoryName,
     contextPdfs
 }) => {
@@ -91,7 +87,12 @@ const InputPanel: React.FC<InputPanelProps> = ({
         <div className="p-2 -mx-2 mb-2">
         </div>
         <div className="p-3 bg-brand-bg rounded-lg">
-            <p className="text-sm text-brand-text-medium mb-3">Ground generation with context from textbooks.</p>
+            <p className="text-sm text-brand-text-medium mb-3">
+              {directoryName === 'Online Textbooks' 
+                  ? 'Using online textbooks by default. You can override by uploading a local folder.' 
+                  : 'Ground generation with context from textbooks.'
+              }
+            </p>
             <input
                 type="file"
                 webkitdirectory="true"
@@ -101,33 +102,16 @@ const InputPanel: React.FC<InputPanelProps> = ({
                 onChange={handleDirectoryChange}
                 style={{ display: 'none' }}
              />
-             <div className="flex items-center gap-2">
-                <button
-                    onClick={handleConnectClick}
-                    className="w-1/2 bg-brand-primary/80 text-white font-bold py-2 px-4 rounded-lg hover:bg-brand-primary transition-colors flex items-center justify-center gap-2"
-                >
-                  <FolderIcon />
-                  Local Folder
-                </button>
-                <button
-                    onClick={onLoadOnlineBooks}
-                    disabled={isOnlineLoading}
-                    className="w-1/2 bg-sky-600/80 text-white font-bold py-2 px-4 rounded-lg hover:bg-sky-600 transition-colors flex items-center justify-center gap-2 disabled:bg-slate-500 disabled:cursor-not-allowed"
-                >
-                  {isOnlineLoading ? (
-                    <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                  ) : (
-                     <CloudDownloadIcon />
-                  )}
-                  Online Books
-                </button>
-            </div>
+             <button
+                  onClick={handleConnectClick}
+                  className="w-full bg-brand-primary/80 text-white font-bold py-2 px-4 rounded-lg hover:bg-brand-primary transition-colors flex items-center justify-center gap-2"
+              >
+                <FolderIcon />
+                Upload Local Folder
+            </button>
             {directoryName && (
                 <div className="mt-3">
-                    <p className="text-xs text-brand-text-medium mb-2">Connected: <span className="font-mono bg-brand-bg p-1 rounded">{directoryName}</span></p>
+                    <p className="text-xs text-brand-text-medium mb-2">Active Context: <span className="font-mono bg-brand-bg p-1 rounded">{directoryName}</span></p>
                     <div className="mt-2 max-h-96 overflow-y-auto custom-scrollbar pr-2 space-y-1">
                         {contextPdfs.length > 0 ? (
                             contextPdfs.sort((a,b) => a.name.localeCompare(b.name, undefined, {numeric: true})).map(pdf => (
