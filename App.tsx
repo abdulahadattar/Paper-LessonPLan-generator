@@ -517,15 +517,17 @@ const App: React.FC = () => {
             return partCache.current.get(url)!;
         }
         const promise = (async () => {
-            // Using a CORS proxy to bypass fetch restrictions from the browser
-            const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(url)}`;
-            const response = await fetch(proxyUrl);
+            const response = await fetch(`/api/fetch-pdf?url=${encodeURIComponent(url)}`);
             if (!response.ok) {
-                throw new Error(`Failed to fetch ${name}. Status: ${response.status} ${response.statusText}`);
+                throw new Error(`Failed to fetch ${name} via backend. Status: ${response.status} ${response.statusText}`);
             }
-            const blob = await response.blob();
-            const file = new File([blob], name, { type: 'application/pdf' });
-            return fileToPart(file);
+            const base64Data = await response.text();
+            return {
+                inlineData: {
+                    mimeType: 'application/pdf',
+                    data: base64Data,
+                },
+            };
         })();
         partCache.current.set(url, promise);
         return promise;

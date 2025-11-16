@@ -1,0 +1,14 @@
+
+{
+  "functions": {
+    "backend/server.cjs": {
+      "memory": 1024
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": "/backend/server.cjs"
+    }
+  ]
+}
