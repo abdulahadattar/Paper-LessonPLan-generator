@@ -394,6 +394,7 @@ const App: React.FC = () => {
   const [logMessages, setLogMessages] = useState<string[]>([]);
   const [isComplete, setIsComplete] = useState<boolean>(false);
   const [exportOption, setExportOption] = useState<ExportOption>('individual');
+  const [concurrencyLevel, setConcurrencyLevel] = useState<number>(3);
   const isCancelledRef = useRef(false);
   const partCache = useRef(new Map<string, Promise<Part>>());
 
@@ -482,14 +483,12 @@ const App: React.FC = () => {
     setLogMessages(['Starting lesson plan generation...']);
     const selectedSlos = allSlos.filter(slo => selectedSloUniqueIds.includes(slo.uniqueId!));
     let wasCancelled = false;
-    const allGeneratedPlans: LessonPlan[] = [];
-    
+
     const urlToPart = async (url: string, name: string): Promise<Part> => {
         if (partCache.current.has(url)) {
             return partCache.current.get(url)!;
         }
         const promise = (async () => {
-            // Using a CORS proxy to bypass fetch restrictions from the browser
             const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(url)}`;
             const response = await fetch(proxyUrl);
             if (!response.ok) {
@@ -503,12 +502,11 @@ const App: React.FC = () => {
         return promise;
     };
 
-
     const processSlo = async (slo: SLO): Promise<LessonPlan | null> => {
-        const MAX_RETRIES = 1; // 1 initial try + 1 retry = 2 total attempts
+        const MAX_RETRIES = 5;
         for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
             try {
-                if (isCancelledRef.current) return null; // Check for cancellation before API call
+                if (isCancelledRef.current) return null;
                 if (attempt > 0) {
                     setLogMessages(prev => [...prev, `Retrying generation for ${slo.SLO_ID}...`]);
                 }
@@ -522,25 +520,18 @@ const App: React.FC = () => {
                     for (const pdf of contextPdfsForSlo) {
                         try {
                             let part: Part | undefined;
-                            if (pdf.file) {
-                                part = await fileToPart(pdf.file);
-                            } else if (pdf.url) {
-                                part = await urlToPart(pdf.url, pdf.name);
-                            }
+                            if (pdf.file) { part = await fileToPart(pdf.file); }
+                            else if (pdf.url) { part = await urlToPart(pdf.url, pdf.name); }
                             if (part) contextFileParts.push(part);
                         } catch (e) {
-                            const errorDetails = e instanceof Error ? e.message : String(e);
-                            const errorMsg = `Failed to load context PDF ${pdf.name}. Generation may be less accurate. Details: ${errorDetails}`;
+                            const errorMsg = `Failed to load context PDF ${pdf.name}. Details: ${e instanceof Error ? e.message : String(e)}`;
                             console.error(`Error loading ${pdf.name}`, e);
                             setLogMessages(prev => [...prev, `WARN: ${errorMsg}`]);
                         }
                     }
-                } else {
-                    if (attempt === 0) {
-                        const warningMsg = `No context PDF found for SLO ${slo.SLO_ID}. Generation may be less accurate.`;
-                        console.warn(warningMsg);
-                        setLogMessages(prev => [...prev, `WARN: ${warningMsg}`]);
-                    }
+                } else if (attempt === 0) {
+                    const warningMsg = `No context PDF found for SLO ${slo.SLO_ID}. Generation may be less accurate.`;
+                    setLogMessages(prev => [...prev, `WARN: ${warningMsg}`]);
                 }
                 
                 if (attempt === 0) setLogMessages(prev => [...prev, `Generating lesson plan content...`]);
@@ -551,96 +542,90 @@ const App: React.FC = () => {
                 const errorMsg = `Failed for ${slo.SLO_ID} (Attempt ${attempt + 1}/${MAX_RETRIES + 1}): ${error instanceof Error ? error.message : String(error)}`;
                 console.error(errorMsg);
                 setLogMessages(prev => [...prev, `ERROR: ${errorMsg}`]);
-                if (attempt < MAX_RETRIES) {
-                    await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1s before retry
-                }
+                if (attempt < MAX_RETRIES) await new Promise(resolve => setTimeout(resolve, 1000));
             }
         }
         setLogMessages(prev => [...prev, `ERROR: Skipped ${slo.SLO_ID} after all attempts failed.`]);
         return null;
     };
 
-    if (exportOption === 'individual') {
-        setGenerationProgress({ current: 0, total: selectedSlos.length });
-        for (let i = 0; i < selectedSlos.length; i++) {
-            if (isCancelledRef.current) { wasCancelled = true; break; }
-            const slo = selectedSlos[i];
-            setGenerationProgress({ current: i + 1, total: selectedSlos.length });
-            setLogMessages(prev => [...prev, `\nProcessing SLO: ${slo.SLO_ID}`]);
-            
-            const plan = await processSlo(slo);
-            if (plan) {
-                allGeneratedPlans.push(plan);
-                setLogMessages(prev => [...prev, `Exporting individual files...`]);
+    const successfulResults: { slo: SLO; plan: LessonPlan }[] = [];
+    setGenerationProgress({ current: 0, total: selectedSlos.length });
+
+    for (let i = 0; i < selectedSlos.length; i += concurrencyLevel) {
+        if (isCancelledRef.current) { wasCancelled = true; break; }
+
+        const chunk = selectedSlos.slice(i, i + concurrencyLevel);
+        const promises = chunk.map(slo => 
+            (async () => {
+                if (isCancelledRef.current) return null;
+                setLogMessages(prev => [...prev, `\nProcessing SLO: ${slo.SLO_ID}`]);
+                const plan = await processSlo(slo);
+                setGenerationProgress(prev => ({ current: (prev?.current ?? 0) + 1, total: selectedSlos.length }));
+                return plan ? { slo, plan } : null;
+            })()
+        );
+
+        const chunkResults = await Promise.all(promises);
+        successfulResults.push(...chunkResults.filter((r): r is { slo: SLO, plan: LessonPlan } => r !== null));
+    }
+
+    const allGeneratedPlans = successfulResults.map(r => r.plan);
+    setGeneratedPlans(allGeneratedPlans);
+
+    if (!wasCancelled && successfulResults.length > 0) {
+        if (exportOption === 'individual') {
+            setLogMessages(prev => [...prev, `\nExporting all individual files...`]);
+            for (const { slo, plan } of successfulResults) {
+                if(isCancelledRef.current) { wasCancelled = true; break; }
                 await exportAsDocx(plan, slo.SLO_ID);
                 await new Promise(resolve => setTimeout(resolve, 250));
                 await exportAsPdf(plan, slo.SLO_ID);
                 await new Promise(resolve => setTimeout(resolve, 250));
             }
-        }
-    } else {
-        let groups: Map<string, SLO[]>;
-        switch (exportOption) {
-            case 'byUnit':
-                groups = selectedSlos.reduce((acc, current) => {
-                    const key = `${current.grade}_${current.Unit_Name}`;
-                    if (!acc.has(key)) acc.set(key, []);
-                    acc.get(key)!.push(current);
-                    return acc;
-                }, new Map());
-                break;
-            case 'byGrade':
-                groups = selectedSlos.reduce((acc, current) => {
-                    const key = current.grade!;
-                    if (!acc.has(key)) acc.set(key, []);
-                    acc.get(key)!.push(current);
-                    return acc;
-                }, new Map());
-                break;
-            case 'all':
-            default:
-                groups = new Map([['all_selected_plans', selectedSlos]]);
-                break;
-        }
-
-        setGenerationProgress({ current: 0, total: selectedSlos.length });
-        let processedCount = 0;
-
-        for (const [key, slosInGroup] of groups.entries()) {
-            if (wasCancelled) break;
-            if (slosInGroup.length === 0) continue;
-            
-            const groupName = key.replace(/_/g, ' ');
-            setLogMessages(prev => [...prev, `\n--- Starting group: ${groupName} ---`]);
-
-            const generatedPlansForGroup: LessonPlan[] = [];
-            for (const slo of slosInGroup) {
-                if (isCancelledRef.current) { wasCancelled = true; break; }
-                processedCount++;
-                setGenerationProgress({ current: processedCount, total: selectedSlos.length });
-                setLogMessages(prev => [...prev, `Processing SLO: ${slo.SLO_ID}`]);
-                const plan = await processSlo(slo);
-                if (plan) {
-                    generatedPlansForGroup.push(plan);
-                }
+        } else {
+            let groups: Map<string, { slo: SLO; plan: LessonPlan }[]>;
+            switch (exportOption) {
+                case 'byUnit':
+                    groups = successfulResults.reduce((acc, current) => {
+                        const key = `${current.slo.grade}_${current.slo.Unit_Name}`;
+                        if (!acc.has(key)) acc.set(key, []);
+                        acc.get(key)!.push(current);
+                        return acc;
+                    }, new Map());
+                    break;
+                case 'byGrade':
+                    groups = successfulResults.reduce((acc, current) => {
+                        const key = current.slo.grade!;
+                        if (!acc.has(key)) acc.set(key, []);
+                        acc.get(key)!.push(current);
+                        return acc;
+                    }, new Map());
+                    break;
+                case 'all':
+                default:
+                    groups = new Map([['all_selected_plans', successfulResults]]);
+                    break;
             }
-            allGeneratedPlans.push(...generatedPlansForGroup);
-            
-            if (generatedPlansForGroup.length > 0 && !wasCancelled) {
-                const fileName = formatFileName(groupName);
-                setLogMessages(prev => [...prev, `Combining and exporting ${fileName}.pdf...`]);
-                await exportMultipleLessonsAsPdf(generatedPlansForGroup, fileName);
-                await new Promise(resolve => setTimeout(resolve, 250));
-                
-                setLogMessages(prev => [...prev, `Combining and exporting ${fileName}.docx...`]);
-                await exportMultipleLessonsAsDocx(generatedPlansForGroup, fileName);
-                await new Promise(resolve => setTimeout(resolve, 250));
+
+            for (const [key, groupResults] of groups.entries()) {
+                if (isCancelledRef.current) { wasCancelled = true; break; }
+                if (groupResults.length > 0) {
+                    const groupName = key.replace(/_/g, ' ');
+                    const plansInGroup = groupResults.map(r => r.plan);
+                    const fileName = formatFileName(groupName);
+                    setLogMessages(prev => [...prev, `\n--- Combining and exporting group: ${groupName} ---`]);
+                    setLogMessages(prev => [...prev, `Exporting ${fileName}.pdf...`]);
+                    await exportMultipleLessonsAsPdf(plansInGroup, fileName);
+                    await new Promise(resolve => setTimeout(resolve, 250));
+                    setLogMessages(prev => [...prev, `Exporting ${fileName}.docx...`]);
+                    await exportMultipleLessonsAsDocx(plansInGroup, fileName);
+                    await new Promise(resolve => setTimeout(resolve, 250));
+                }
             }
         }
     }
     
-    setGeneratedPlans(allGeneratedPlans);
-
     if (wasCancelled) {
         setLogMessages(prev => [...prev, `\nGeneration cancelled by user.`]);
     } else {
@@ -769,22 +754,48 @@ const App: React.FC = () => {
 
             {view === 'slo' && selectedSloUniqueIds.length > 0 && !isLoading && !isComplete && (
                 <div className="absolute bottom-0 right-0 p-4 md:p-6 flex flex-col items-end gap-3 z-10 w-full md:w-auto">
-                    <div className="bg-brand-bg/80 backdrop-blur-sm p-1 rounded-lg border border-brand-border flex items-center text-sm shadow-lg">
-                        <span className="px-3 text-brand-text-medium hidden sm:inline">Export:</span>
-                        {exportOptions.map(option => (
-                            <button 
-                                key={option.id} 
-                                onClick={() => setExportOption(option.id as ExportOption)} 
-                                className={`px-3 py-1.5 rounded-md transition-colors text-xs sm:text-sm whitespace-nowrap ${exportOption === option.id ? 'bg-brand-primary text-white font-semibold' : 'hover:bg-brand-panel text-brand-text-light'}`}
-                                title={option.description}
-                            >
-                                {option.title.replace(' Files', '').replace('Combine by ', '').replace('Combine ','')}
-                            </button>
-                        ))}
+                    <div className="bg-brand-bg/80 backdrop-blur-sm p-2 rounded-lg border border-brand-border flex flex-col sm:flex-row items-center gap-3 text-sm shadow-lg">
+                        <div className="flex items-center">
+                            <span className="pr-2 text-brand-text-medium font-semibold">Export:</span>
+                            {exportOptions.map(option => (
+                                <button 
+                                    key={option.id} 
+                                    onClick={() => setExportOption(option.id as ExportOption)} 
+                                    className={`px-3 py-1.5 rounded-md transition-colors text-xs sm:text-sm whitespace-nowrap ${exportOption === option.id ? 'bg-brand-primary text-white font-semibold' : 'hover:bg-brand-panel text-brand-text-light'}`}
+                                    title={option.description}
+                                >
+                                    {option.title.replace(' Files', '').replace('Combine by ', '').replace('Combine ','')}
+                                </button>
+                            ))}
+                        </div>
+                        <div className="w-full sm:w-auto border-t sm:border-t-0 sm:border-l border-brand-border my-1 sm:my-0 sm:mx-2 self-stretch"></div>
+                        <div className="flex items-center gap-2">
+                            <label htmlFor="concurrency" className="text-brand-text-medium font-semibold whitespace-nowrap">Parallel Runs:</label>
+                            <input
+                                type="number"
+                                id="concurrency"
+                                min="1"
+                                max="10"
+                                value={concurrencyLevel}
+                                onChange={(e) => {
+                                    const val = e.target.value;
+                                    if (val === '') {
+                                        setConcurrencyLevel(1);
+                                    } else {
+                                        const num = parseInt(val, 10);
+                                        if (num >= 1 && num <= 100) {
+                                            setConcurrencyLevel(num);
+                                        }
+                                    }
+                                }}
+                                className="w-14 bg-brand-surface border border-brand-border rounded-md p-1.5 text-center focus:ring-2 focus:ring-brand-primary outline-none"
+                                aria-label="Number of parallel requests"
+                            />
+                        </div>
                     </div>
                     <button 
                         onClick={generateAllLessonPlans}
-                        className="bg-brand-primary text-white font-bold py-3 px-5 rounded-lg hover:bg-brand-primary-hover transition-all flex items-center justify-center gap-2 text-base shadow-lg shadow-brand-primary/20"
+                        className="bg-brand-primary text-white font-bold py-3 px-5 rounded-lg hover:bg-brand-primary-hover transition-all flex items-center justify-center gap-2 text-base shadow-lg shadow-brand-primary/20 w-full sm:w-auto"
                     >
                       <WandIcon className="w-5 h-5" />
                       Generate ({selectedSloUniqueIds.length})
