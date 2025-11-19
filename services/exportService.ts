@@ -1,3 +1,4 @@
+
 import {
   AlignmentType,
   Document,
@@ -9,11 +10,10 @@ import {
   TextRun,
   VerticalAlign,
   WidthType,
-  PageBreak,
   ISectionOptions,
 } from 'docx';
 import saveAs from 'file-saver';
-import { LessonPlan, Activity } from '../types';
+import { LessonPlan } from '../types';
 
 // Declaration for pdfmake, which is loaded via a script tag in index.html
 declare const pdfMake: any;
@@ -164,6 +164,7 @@ const createDocxContentForPlan = (lessonPlan: LessonPlan): (Paragraph | Table)[]
   });
   children.push(createSectionHeading('HOMEWORK ASSIGNMENT'));
   children.push(createRichParagraph(lessonPlan.homework));
+
   return children;
 };
 

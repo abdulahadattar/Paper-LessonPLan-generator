@@ -13,6 +13,7 @@ export interface LessonPlan {
   materials: string[];
   activities: Activity[];
   homework: string;
+  unitNumber?: string; // Added to track context
 }
 
 export interface SLO {
@@ -27,3 +28,7 @@ export interface SLO {
 }
 
 export type GroupedSlos = Record<string, SLO[]>;
+
+export interface UnitsByGrade {
+  [grade: string]: GroupedSlos;
+}
