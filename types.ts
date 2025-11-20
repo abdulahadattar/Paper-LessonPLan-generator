@@ -32,3 +32,13 @@ export type GroupedSlos = Record<string, SLO[]>;
 export interface UnitsByGrade {
   [grade: string]: GroupedSlos;
 }
+
+export interface ContextPdf {
+    name: string;
+    grade: string;
+    unit: string;
+    file?: File;
+    url?: string;
+}
+
+export type ExportOption = 'individual' | 'byUnit' | 'byGrade' | 'all';

@@ -1,55 +1,52 @@
 
-import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { SLO, GroupedSlos, LessonPlan, UnitsByGrade } from './types';
-import { generateLessonPlan } from './services/geminiService';
-import { loadInitialSlos } from './services/sloService';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { ExportOption } from './types';
 import InputPanel from './components/InputPanel';
 import { InfoIcon, CloseIcon } from './components/icons/MiscIcons';
 import { WandIcon } from './components/icons/WandIcon';
-import { exportAsPdf, exportAsDocx, formatFileName, exportMultipleLessonsAsDocx, exportMultipleLessonsAsPdf } from './services/exportService';
-import { Part, GoogleGenAI } from '@google/genai';
-import { getRemotePdfs } from './services/remoteContextService';
 import ResultsPanel from './components/ResultsPanel';
 import SloPanel from './components/SloPanel';
 import Header from './components/Header';
 import GenerationStatusPanel from './components/GenerationStatusPanel';
 
+// Hooks
+import { useSloData } from './hooks/useSloData';
+import { useLessonGeneration } from './hooks/useLessonGeneration';
 
-interface ContextPdf {
-    name: string;
-    grade: string;
-    unit: string;
-    file?: File;
-    url?: string;
-}
-
-type ExportOption = 'individual' | 'byUnit' | 'byGrade' | 'all';
 type View = 'slo' | 'results';
 type Theme = 'light' | 'dark';
 
 // --- App Component ---
 const App: React.FC = () => {
-  const [unitsByGrade, setUnitsByGrade] = useState<UnitsByGrade>({});
-  const [allSlos, setAllSlos] = useState<SLO[]>([]);
-  const [selectedSloUniqueIds, setSelectedSloUniqueIds] = useState<string[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [isParsing, setIsParsing] = useState(true);
-  const [generationProgress, setGenerationProgress] = useState<{ current: number; total: number } | null>(null);
-  // Initialize sidebar as closed on mobile to prevent overlap (stacked UI issue)
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [logMessages, setLogMessages] = useState<string[]>([]);
-  const [isComplete, setIsComplete] = useState<boolean>(false);
-  const [exportOption, setExportOption] = useState<ExportOption>('individual');
-  const isCancelledRef = useRef(false);
+  // Custom Hooks
+  const { 
+    unitsByGrade, 
+    allSlos, 
+    isParsing, 
+    directoryName, 
+    contextPdfs, 
+    handleDirectorySelected 
+  } = useSloData();
 
-  const [directoryName, setDirectoryName] = useState<string | null>(null);
-  const [contextPdfs, setContextPdfs] = useState<ContextPdf[]>([]);
+  const { 
+    generateAllLessonPlans, 
+    stopGeneration, 
+    isLoading, 
+    generationProgress, 
+    logMessages, 
+    isComplete, 
+    generatedPlans, 
+    clearLogs 
+  } = useLessonGeneration(allSlos, contextPdfs);
+
+  // UI State
+  const [selectedSloUniqueIds, setSelectedSloUniqueIds] = useState<string[]>([]);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [exportOption, setExportOption] = useState<ExportOption>('individual');
   const [view, setView] = useState<View>('slo');
-  const [generatedPlans, setGeneratedPlans] = useState<LessonPlan[]>([]);
-  
-  // Theme State
   const [theme, setTheme] = useState<Theme>('light');
 
+  // Theme Management
   useEffect(() => {
     const savedTheme = localStorage.getItem('theme') as Theme;
     if (savedTheme) {
@@ -70,49 +67,7 @@ const App: React.FC = () => {
 
   const toggleTheme = () => setTheme(prev => prev === 'light' ? 'dark' : 'light');
   
-  // Persistent PDF cache (Stores fileUri for remote files)
-  const pdfCache = useMemo(() => new Map<string, string>(), []);
-  // In-flight request cache to deduplicate downloads
-  const fetchPromises = useMemo(() => new Map<string, Promise<string>>(), []);
-
-
-  useEffect(() => {
-    const fetchInitialData = async () => {
-        setIsParsing(true);
-        
-        // Load SLOs
-        const parsedSlos = await loadInitialSlos();
-        const slosWithUniqueIds = parsedSlos.map((slo, index) => ({
-            ...slo,
-            uniqueId: `${slo.SLO_ID}_${index}`
-        }));
-        setAllSlos(slosWithUniqueIds);
-
-        const grouped = slosWithUniqueIds.reduce<UnitsByGrade>((acc, slo) => {
-            const grade = slo.grade || 'Ungraded';
-            const unit = slo.Unit_Name || 'General';
-            if (!acc[grade]) acc[grade] = {};
-            if (!acc[grade][unit]) acc[grade][unit] = [];
-            acc[grade][unit].push(slo);
-            return acc;
-        }, {} as UnitsByGrade);
-        setUnitsByGrade(grouped);
-        
-        // Load remote PDFs by default
-        const remotePdfs = getRemotePdfs();
-        setContextPdfs(remotePdfs.map(p => ({
-            name: p.name,
-            grade: p.grade,
-            unit: p.unit,
-            url: p.url,
-        })));
-        setDirectoryName("Online Textbooks");
-
-        setIsParsing(false);
-    };
-    fetchInitialData();
-  }, []);
-  
+  // Memoized Calculations
   const missingPdfSloIds = useMemo(() => {
     const selectedSlos = allSlos.filter(slo => selectedSloUniqueIds.includes(slo.uniqueId!));
     if (selectedSlos.length === 0) return [];
@@ -131,313 +86,26 @@ const App: React.FC = () => {
         .map(slo => slo.uniqueId!);
   }, [selectedSloUniqueIds, allSlos, contextPdfs]);
 
-  const fileToPart = async (file: File): Promise<Part> => {
-    const base64 = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.readAsDataURL(file);
-        reader.onload = () => resolve((reader.result as string).split(',')[1]);
-        reader.onerror = (error) => reject(error);
-    });
-    return {
-        inlineData: {
-            mimeType: file.type,
-            data: base64,
-        },
-    };
-  };
-  
-  // Robust URL Fetcher with Proxy Fallback and Caching
-  const urlToPart = async (url: string): Promise<Part> => {
-    // 1. Check cache for existing Gemini URI
-    if (pdfCache.has(url)) {
-        return {
-            fileData: { mimeType: 'application/pdf', fileUri: pdfCache.get(url)! },
-        };
-    }
-
-    // 2. Check in-flight deduplication
-    if (fetchPromises.has(url)) {
-        try {
-            const uri = await fetchPromises.get(url)!;
-            return { fileData: { mimeType: 'application/pdf', fileUri: uri } };
-        } catch (e) {
-            fetchPromises.delete(url); // Retry on failure
-            throw e;
-        }
-    }
-
-    // 3. Define download and upload logic
-    const downloadAndUpload = async (): Promise<string> => {
-        let blob: Blob;
-        
-        // Try fetching via primary proxy (corsproxy.io)
-        try {
-            console.log(`Attempting download via primary proxy for: ${url.split('/').pop()}`);
-            const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(url)}`;
-            const response = await fetch(proxyUrl);
-            if (!response.ok) throw new Error(`Primary proxy error: ${response.status}`);
-            blob = await response.blob();
-        } catch (primaryError) {
-            console.warn("Primary proxy failed, attempting backup...", primaryError);
-            // Try fetching via backup proxy (allorigins)
-            try {
-                const backupUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
-                const response = await fetch(backupUrl);
-                if (!response.ok) throw new Error(`Backup proxy error: ${response.status}`);
-                blob = await response.blob();
-            } catch (backupError) {
-                console.warn("Backup proxy failed, attempting direct fetch...", backupError);
-                // Last resort: Direct fetch (works in some local/dev environments)
-                const response = await fetch(url);
-                if (!response.ok) throw new Error(`Direct fetch error: ${response.status}`);
-                blob = await response.blob();
-            }
-        }
-
-        if (!blob || blob.size < 1000) {
-            throw new Error(`Downloaded file is too small (${blob?.size} bytes), likely invalid.`);
-        }
-
-        // Upload to Gemini
-        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
-        const filename = url.split('/').pop()?.split('?')[0] || 'textbook.pdf';
-        const file = new File([blob], filename, { type: 'application/pdf' });
-
-        console.log(`Uploading ${filename} to Gemini...`);
-        const uploadResponse = await ai.files.upload({
-            file: file,
-            config: { displayName: filename, mimeType: 'application/pdf' }
-        });
-        
-        return uploadResponse.uri;
-    };
-
-    // 4. Execute and Cache
-    const promise = downloadAndUpload();
-    fetchPromises.set(url, promise);
-
-    try {
-        const uri = await promise;
-        pdfCache.set(url, uri);
-        return { fileData: { mimeType: 'application/pdf', fileUri: uri } };
-    } catch (error) {
-        fetchPromises.delete(url);
-        console.error("PDF Processing Failed", error);
-        throw new Error(`Failed to process PDF ${url.split('/').pop()}: ${error instanceof Error ? error.message : String(error)}`);
-    }
-  };
-
-  const getContextPartsForSlo = async (grade: string, unitNumber: string) => {
-      const contextPdfsForSlo = contextPdfs.filter(p => p.grade === grade && parseInt(p.unit, 10) === parseInt(unitNumber, 10));
-      const contextFileParts: Part[] = [];
-      if (contextPdfsForSlo.length > 0) {
-          for (const pdf of contextPdfsForSlo) {
-              try {
-                  let part: Part | undefined;
-                  if (pdf.file) {
-                      part = await fileToPart(pdf.file);
-                  } else if (pdf.url) {
-                      part = await urlToPart(pdf.url);
-                  }
-                  if (part) contextFileParts.push(part);
-              } catch (e) {
-                  console.error(`Error processing ${pdf.name}`, e);
-                  // Log this error to the UI so the user knows which file failed
-                  setLogMessages(prev => [...prev, `ERROR processing ${pdf.name}: ${e instanceof Error ? e.message : 'Unknown error'}`]);
-              }
-          }
-      }
-      return contextFileParts;
-  };
-
-
-  const generateAllLessonPlans = async () => {
-    isCancelledRef.current = false;
-    setIsLoading(true);
-    setIsComplete(false);
-    setGeneratedPlans([]);
-    setLogMessages(['Starting lesson plan generation...']);
-    const selectedSlos = allSlos.filter(slo => selectedSloUniqueIds.includes(slo.uniqueId!));
-    let wasCancelled = false;
-    const allGeneratedPlans: LessonPlan[] = [];
-    
-    const processSlo = async (slo: SLO): Promise<LessonPlan | null> => {
-        const MAX_RETRIES = 1; 
-        for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-            try {
-                if (isCancelledRef.current) return null; 
-                if (attempt > 0) {
-                    setLogMessages(prev => [...prev, `Retrying generation for ${slo.SLO_ID}...`]);
-                }
-                const unitContextSlos = selectedSlos.filter(s => s.grade === slo.grade && s.Unit_Name === slo.Unit_Name);
-                
-                if (attempt === 0) setLogMessages(prev => [...prev, `Preparing context for ${slo.SLO_ID}...`]);
-                const contextFileParts = await getContextPartsForSlo(slo.grade!, slo.Unit_Number);
-
-                if (contextFileParts.length === 0 && attempt === 0) {
-                     setLogMessages(prev => [...prev, `WARN: No valid context PDF found for SLO ${slo.SLO_ID}. Generation will rely on internal knowledge.`]);
-                }
-                
-                if (attempt === 0) setLogMessages(prev => [...prev, `Generating lesson plan content...`]);
-                const plan = await generateLessonPlan(slo, unitContextSlos, contextFileParts);
-                
-                plan.unitNumber = slo.Unit_Number;
-                
-                setLogMessages(prev => [...prev, `Content received for "${plan.title}"`]);
-                return plan;
-            } catch (error) {
-                const errorMsg = `Failed for ${slo.SLO_ID} (Attempt ${attempt + 1}/${MAX_RETRIES + 1}): ${error instanceof Error ? error.message : String(error)}`;
-                console.error(errorMsg);
-                setLogMessages(prev => [...prev, `ERROR: ${errorMsg}`]);
-                if (attempt < MAX_RETRIES) {
-                    await new Promise(resolve => setTimeout(resolve, 1000));
-                }
-            }
-        }
-        setLogMessages(prev => [...prev, `ERROR: Skipped ${slo.SLO_ID} after all attempts failed.`]);
-        return null;
-    };
-
-    if (exportOption === 'individual') {
-        setGenerationProgress({ current: 0, total: selectedSlos.length });
-        for (let i = 0; i < selectedSlos.length; i++) {
-            if (isCancelledRef.current) { wasCancelled = true; break; }
-            const slo = selectedSlos[i];
-            setGenerationProgress({ current: i + 1, total: selectedSlos.length });
-            setLogMessages(prev => [...prev, `\nProcessing SLO: ${slo.SLO_ID}`]);
-            
-            const plan = await processSlo(slo);
-            if (plan) {
-                allGeneratedPlans.push(plan);
-                setLogMessages(prev => [...prev, `Exporting individual files...`]);
-                await exportAsDocx(plan, slo.SLO_ID);
-                await new Promise(resolve => setTimeout(resolve, 250));
-                await exportAsPdf(plan, slo.SLO_ID);
-                await new Promise(resolve => setTimeout(resolve, 250));
-            }
-        }
-    } else {
-        let groups: Map<string, SLO[]>;
-        switch (exportOption) {
-            case 'byUnit':
-                groups = selectedSlos.reduce((acc, current) => {
-                    const key = `${current.grade}_${current.Unit_Name}`;
-                    if (!acc.has(key)) acc.set(key, []);
-                    acc.get(key)!.push(current);
-                    return acc;
-                }, new Map());
-                break;
-            case 'byGrade':
-                groups = selectedSlos.reduce((acc, current) => {
-                    const key = current.grade!;
-                    if (!acc.has(key)) acc.set(key, []);
-                    acc.get(key)!.push(current);
-                    return acc;
-                }, new Map());
-                break;
-            case 'all':
-            default:
-                groups = new Map([['all_selected_plans', selectedSlos]]);
-                break;
-        }
-
-        setGenerationProgress({ current: 0, total: selectedSlos.length });
-        let processedCount = 0;
-
-        for (const [key, slosInGroup] of groups.entries()) {
-            if (wasCancelled) break;
-            if (slosInGroup.length === 0) continue;
-            
-            const groupName = key.replace(/_/g, ' ');
-            setLogMessages(prev => [...prev, `\n--- Starting group: ${groupName} ---`]);
-
-            const generatedPlansForGroup: LessonPlan[] = [];
-            for (const slo of slosInGroup) {
-                if (isCancelledRef.current) { wasCancelled = true; break; }
-                processedCount++;
-                setGenerationProgress({ current: processedCount, total: selectedSlos.length });
-                setLogMessages(prev => [...prev, `Processing SLO: ${slo.SLO_ID}`]);
-                const plan = await processSlo(slo);
-                if (plan) {
-                    generatedPlansForGroup.push(plan);
-                }
-            }
-            allGeneratedPlans.push(...generatedPlansForGroup);
-            
-            if (generatedPlansForGroup.length > 0 && !wasCancelled) {
-                const fileName = formatFileName(groupName);
-                setLogMessages(prev => [...prev, `Combining and exporting ${fileName}.pdf...`]);
-                await exportMultipleLessonsAsPdf(generatedPlansForGroup, fileName);
-                await new Promise(resolve => setTimeout(resolve, 250));
-                
-                setLogMessages(prev => [...prev, `Combining and exporting ${fileName}.docx...`]);
-                await exportMultipleLessonsAsDocx(generatedPlansForGroup, fileName);
-                await new Promise(resolve => setTimeout(resolve, 250));
-            }
-        }
-    }
-    
-    setGeneratedPlans(allGeneratedPlans);
-
-    if (wasCancelled) {
-        setLogMessages(prev => [...prev, `\nGeneration cancelled by user.`]);
-    } else {
-        setLogMessages(prev => [...prev, `\nGeneration finished.`]);
-        setIsComplete(true);
-    }
-
-    setIsLoading(false);
-    setGenerationProgress(null);
-  };
-
-  const handleDirectorySelected = (files: FileList) => {
-    if (files.length > 0) {
-      const fileArray = Array.from(files);
-      const firstPath = fileArray[0].webkitRelativePath;
-      if (firstPath) {
-        const rootDir = firstPath.split('/')[0];
-        setDirectoryName(rootDir);
-      } else {
-        setDirectoryName("Selected Folder");
-      }
-
-      const pdfs: ContextPdf[] = [];
-      for (const file of fileArray) {
-        if (file.name.toLowerCase().endsWith('.pdf')) {
-          const gradeMatch = file.name.match(/Grade (\d+)/i);
-          const unitMatch = file.name.match(/Unit (\d+)/i);
-          if (gradeMatch && unitMatch) {
-            const grade = `Grade ${gradeMatch[1]}`;
-            const unit = unitMatch[1];
-            pdfs.push({ name: file.name, grade, unit, file });
-          }
-        }
-      }
-      setContextPdfs(pdfs);
-    }
-  };
-
   const displayablePdfs = useMemo(() => 
     contextPdfs.map(({ name, grade, unit }) => ({ name, grade, unit })), 
   [contextPdfs]);
   
+  // Handlers
+  const handleGenerateClick = () => {
+    generateAllLessonPlans(selectedSloUniqueIds, exportOption);
+  };
+
   const handleCloseGenerationPanel = () => {
-    setIsComplete(false);
-    setIsLoading(false);
+    clearLogs();
   };
   
-  const handleStopGeneration = useCallback(() => {
-    isCancelledRef.current = true;
-  }, []);
-
   const handleClearSelection = useCallback(() => {
     setSelectedSloUniqueIds([]);
   }, []);
 
   const handleViewResults = () => {
     setView('results');
-    setIsComplete(false);
-    setIsLoading(false);
+    clearLogs();
   }
 
   const exportOptions: {id: ExportOption; title: string; description: string}[] = [
@@ -525,7 +193,7 @@ const App: React.FC = () => {
                         ))}
                     </div>
                     <button
-                        onClick={generateAllLessonPlans}
+                        onClick={handleGenerateClick}
                         disabled={selectedSloUniqueIds.length === 0 || isLoading}
                         className="flex items-center gap-3 bg-brand-primary text-white font-bold py-3 px-6 rounded-xl hover:bg-brand-primary-hover transition-all hover:scale-105 active:scale-95 shadow-lg shadow-brand-primary/30 text-base"
                     >
@@ -542,7 +210,7 @@ const App: React.FC = () => {
                 logMessages={logMessages}
                 generationProgress={generationProgress}
                 onClose={handleCloseGenerationPanel}
-                onStop={handleStopGeneration}
+                onStop={stopGeneration}
                 onViewResults={handleViewResults}
               />
             )}

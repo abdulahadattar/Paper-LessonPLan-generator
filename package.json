@@ -14,7 +14,8 @@
     "@google/genai": "^1.29.0",
     "react-dropzone": "^14.3.8",
     "docx": "^8.5.0",
-    "file-saver": "^2.0.5"
+    "file-saver": "^2.0.5",
+    "idb-keyval": "^6.2.1"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",
