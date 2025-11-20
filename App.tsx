@@ -7,7 +7,7 @@ import InputPanel from './components/InputPanel';
 import { InfoIcon, CloseIcon } from './components/icons/MiscIcons';
 import { WandIcon } from './components/icons/WandIcon';
 import { exportAsPdf, exportAsDocx, formatFileName, exportMultipleLessonsAsDocx, exportMultipleLessonsAsPdf } from './services/exportService';
-import { Part } from '@google/genai';
+import { Part, GoogleGenAI } from '@google/genai';
 import { getRemotePdfs } from './services/remoteContextService';
 import ResultsPanel from './components/ResultsPanel';
 import SloPanel from './components/SloPanel';
@@ -70,8 +70,10 @@ const App: React.FC = () => {
 
   const toggleTheme = () => setTheme(prev => prev === 'light' ? 'dark' : 'light');
   
-  // Persistent PDF cache
+  // Persistent PDF cache (Stores fileUri for remote files)
   const pdfCache = useMemo(() => new Map<string, string>(), []);
+  // In-flight request cache to deduplicate downloads
+  const fetchPromises = useMemo(() => new Map<string, Promise<string>>(), []);
 
 
   useEffect(() => {
@@ -144,78 +146,85 @@ const App: React.FC = () => {
     };
   };
   
-  // Robust URL Fetcher with Proxy Rotation
+  // Robust URL Fetcher with Proxy Fallback and Caching
   const urlToPart = async (url: string): Promise<Part> => {
+    // 1. Check cache for existing Gemini URI
     if (pdfCache.has(url)) {
         return {
-            inlineData: {
-                mimeType: 'application/pdf',
-                data: pdfCache.get(url)!,
-            },
+            fileData: { mimeType: 'application/pdf', fileUri: pdfCache.get(url)! },
         };
     }
 
-    // List of proxies to try in order. 
-    // These services help bypass CORS by adding the correct headers.
-    const proxyServices = [
-        'https://corsproxy.io/?',
-        'https://api.codetabs.com/v1/proxy?quest=',
-        'https://api.allorigins.win/raw?url=' 
-    ];
-
-    let lastError: Error | null = null;
-
-    for (const proxyBase of proxyServices) {
+    // 2. Check in-flight deduplication
+    if (fetchPromises.has(url)) {
         try {
-            const proxiedUrl = proxyBase + encodeURIComponent(url);
-            // console.log(`Attempting download via: ${proxyBase}`); // Optional debugging
-
-            const response = await fetch(proxiedUrl);
-            if (!response.ok) {
-                throw new Error(`Proxy ${proxyBase} returned status ${response.status}`);
-            }
-            
-            const blob = await response.blob();
-            
-            // Critical Validation: 
-            // Proxies often return small JSON error objects (e.g., 9 bytes) when rate-limited or failed.
-            // A valid textbook PDF will be significantly larger than 3KB.
-            if (blob.size < 3000) {
-                 throw new Error(`File too small (${blob.size} bytes). Likely a proxy error message.`);
-            }
-            
-            if (blob.type && (blob.type.includes('json') || blob.type.includes('html'))) {
-                 throw new Error(`Invalid content type: ${blob.type}`);
-            }
-
-            const base64 = await new Promise<string>((resolve, reject) => {
-                const reader = new FileReader();
-                reader.readAsDataURL(blob);
-                reader.onload = () => {
-                    const result = (reader.result as string).split(',')[1];
-                    pdfCache.set(url, result); 
-                    resolve(result);
-                };
-                reader.onerror = (error) => reject(error);
-            });
-            
-            // If we got here, success! Return the part.
-            return {
-                inlineData: {
-                    mimeType: 'application/pdf',
-                    data: base64,
-                },
-            };
-
+            const uri = await fetchPromises.get(url)!;
+            return { fileData: { mimeType: 'application/pdf', fileUri: uri } };
         } catch (e) {
-            // console.warn(`Failed with proxy ${proxyBase}:`, e);
-            lastError = e instanceof Error ? e : new Error(String(e));
-            // Loop continues to next proxy...
+            fetchPromises.delete(url); // Retry on failure
+            throw e;
         }
     }
 
-    // If all proxies fail
-    throw new Error(`Failed to download PDF after trying multiple sources. Last error: ${lastError?.message}`);
+    // 3. Define download and upload logic
+    const downloadAndUpload = async (): Promise<string> => {
+        let blob: Blob;
+        
+        // Try fetching via primary proxy (corsproxy.io)
+        try {
+            console.log(`Attempting download via primary proxy for: ${url.split('/').pop()}`);
+            const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(url)}`;
+            const response = await fetch(proxyUrl);
+            if (!response.ok) throw new Error(`Primary proxy error: ${response.status}`);
+            blob = await response.blob();
+        } catch (primaryError) {
+            console.warn("Primary proxy failed, attempting backup...", primaryError);
+            // Try fetching via backup proxy (allorigins)
+            try {
+                const backupUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
+                const response = await fetch(backupUrl);
+                if (!response.ok) throw new Error(`Backup proxy error: ${response.status}`);
+                blob = await response.blob();
+            } catch (backupError) {
+                console.warn("Backup proxy failed, attempting direct fetch...", backupError);
+                // Last resort: Direct fetch (works in some local/dev environments)
+                const response = await fetch(url);
+                if (!response.ok) throw new Error(`Direct fetch error: ${response.status}`);
+                blob = await response.blob();
+            }
+        }
+
+        if (!blob || blob.size < 1000) {
+            throw new Error(`Downloaded file is too small (${blob?.size} bytes), likely invalid.`);
+        }
+
+        // Upload to Gemini
+        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
+        const filename = url.split('/').pop()?.split('?')[0] || 'textbook.pdf';
+        const file = new File([blob], filename, { type: 'application/pdf' });
+
+        console.log(`Uploading ${filename} to Gemini...`);
+        const uploadResponse = await ai.files.upload({
+            file: file,
+            config: { displayName: filename, mimeType: 'application/pdf' }
+        });
+        
+        return uploadResponse.uri;
+    };
+
+    // 4. Execute and Cache
+    const promise = downloadAndUpload();
+    fetchPromises.set(url, promise);
+
+    try {
+        const uri = await promise;
+        pdfCache.set(url, uri);
+        return { fileData: { mimeType: 'application/pdf', fileUri: uri } };
+    } catch (error) {
+        fetchPromises.delete(url);
+        console.error("PDF Processing Failed", error);
+        throw new Error(`Failed to process PDF ${url.split('/').pop()}: ${error instanceof Error ? error.message : String(error)}`);
+    }
   };
 
   const getContextPartsForSlo = async (grade: string, unitNumber: string) => {
@@ -228,15 +237,13 @@ const App: React.FC = () => {
                   if (pdf.file) {
                       part = await fileToPart(pdf.file);
                   } else if (pdf.url) {
-                      // Notify user we are fetching
-                      // setLogMessages(prev => [...prev, `Fetching ${pdf.name}...`]);
                       part = await urlToPart(pdf.url);
                   }
                   if (part) contextFileParts.push(part);
               } catch (e) {
                   console.error(`Error processing ${pdf.name}`, e);
                   // Log this error to the UI so the user knows which file failed
-                  setLogMessages(prev => [...prev, `ERROR downloading ${pdf.name}: ${e instanceof Error ? e.message : 'Unknown error'}`]);
+                  setLogMessages(prev => [...prev, `ERROR processing ${pdf.name}: ${e instanceof Error ? e.message : 'Unknown error'}`]);
               }
           }
       }
