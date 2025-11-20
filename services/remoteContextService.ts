@@ -6,20 +6,21 @@ export interface RemotePdf {
     url: string;
 }
 
-// Base URL for the GitHub Releases where PDFs are hosted
-const BASE_URL = 'https://github.com/abdulahadattar/STBB-BOOKS/releases/download/STBB/';
+// Base URL for the Raw GitHub Content - Fixes CORS issues with Release downloads
+const BASE_URL = 'https://raw.githubusercontent.com/abdulahadattar/STBB-BOOKS/main/';
 
 const fileNames = [
     // Grade 9
-    "Physics.Grade.9.Unit.01.Physical.Quantity.and.Measurement_.pdf",
-    "Physics.Grade.9.Unit.02.Kinematic_.pdf",
-    "Physics.Grade.9.Unit.03.Dynamic_.pdf",
-    "Physics.Grade.9.Unit.04.Turning.Effect.of.Forces_.pdf",
-    "Physics.Grade.9.Unit.05.Forces.and.Matter_.pdf",
-    "Physics.Grade.9.Unit.06.Gravitation_.pdf",
-    "Physics.Grade.9.Unit.07.Energy.Source.and.Transfer.of.Energy_.pdf",
-    "Physics.Grade.9.Unit.08.Properties.of.Matter_.pdf",
-    "Physics.Grade.9.Unit.09.Thermal.Properties.of.Matter_.pdf",
+    "Physics.Grade.9.Unit.1.PHYSICAL.QUANTITIES.AND.MEASUREMENT_.pdf",
+    "Physics.Grade.9.Unit.2.KINEMATICS_.pdf",
+    "Physics.Grade.9.Unit.3.DYNAMICS_.pdf",
+    "Physics.Grade.9.Unit.4.TURNING.EFFECT.OF.FORCES_.pdf",
+    "Physics.Grade.9.Unit.5.FORCES.AND.MATTER_.pdf",
+    "Physics.Grade.9.Unit.6.GRAVITATION_.pdf",
+    "Physics.Grade.9.Unit.7.PROPERTIES.OF.MATTER_.pdf",
+    "Physics.Grade.9.Unit.8.ENERGY.SOURCES.AND.TRANSFER.OF.ENERGY_.pdf",
+    "Physics.Grade.9.Unit.9.THERMAL.PROPERTIES.OF.MATTER_.pdf",
+    
     // Grade 10
     "Physics.Grade.10.Unit.10.General.Waves.Properties_.pdf",
     "Physics.Grade.10.Unit.11.Sound_.pdf",
@@ -32,6 +33,7 @@ const fileNames = [
     "Physics.Grade.10.Unit.18.Information.and.Communication.Technology.ICT_.pdf",
     "Physics.Grade.10.Unit.19.Atomic.Structure_.pdf",
     "Physics.Grade.10.Unit.20.Nuclear.Structure_.pdf",
+
     // Grade 11
     "Physics.Grade.11.Unit.01.Measurements_.pdf",
     "Physics.Grade.11.Unit.02.Kinematics_.pdf",
@@ -48,6 +50,7 @@ const fileNames = [
     "Physics.Grade.11.Unit.12.Acoustics_.pdf",
     "Physics.Grade.11.Unit.13.Physical.Optics_.pdf",
     "Physics.Grade.11.Unit.14.Communication_.pdf",
+    
     // Grade 12
     "Physics.Grade.12.Unit.15.Molecular.Theory.of.Gases_.pdf",
     "Physics.Grade.12.Unit.16.First.Law.of.Thermodynamics_.pdf",
@@ -72,9 +75,6 @@ export const getRemotePdfs = (): RemotePdf[] => {
         const unitMatch = name.match(/Unit\.(\d+)/);
         if (gradeMatch && unitMatch) {
             const originalUrl = `${BASE_URL}${name}`;
-            // We now return the clean URL. Proxying is handled in the fetch logic in App.tsx
-            // to allow for failover strategies.
-            
             return {
                 name,
                 grade: `Grade ${gradeMatch[1]}`,

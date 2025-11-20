@@ -36,6 +36,7 @@ export const useLessonGeneration = (allSlos: SLO[], contextPdfs: ContextPdf[]) =
         try {
             const cachedUri = await get<string>(url);
             if (cachedUri) {
+                // console.log(`[Cache Hit] Using cached URI for: ${url}`);
                 return { fileData: { mimeType: 'application/pdf', fileUri: cachedUri } };
             }
         } catch (e) {
@@ -51,27 +52,18 @@ export const useLessonGeneration = (allSlos: SLO[], contextPdfs: ContextPdf[]) =
         const downloadAndUpload = async (): Promise<string> => {
             let blob: Blob | null = null;
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 20000); // 20s timeout
+            const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout
 
             try {
-                const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(url)}`;
-                const response = await fetch(proxyUrl, { signal: controller.signal });
-                
+                // Attempt direct fetch (Raw GitHub or enabled CORS source)
+                const response = await fetch(url, { signal: controller.signal });
                 if (!response.ok) {
-                     // Fallback for some proxies or direct if CORS allows
-                     throw new Error(`Proxy fetch failed: ${response.status}`);
+                     throw new Error(`Fetch failed: ${response.status} ${response.statusText}`);
                 }
                 blob = await response.blob();
             } catch (error: any) {
-                if (error.name === 'AbortError') throw new Error("Download timed out");
-                // Attempt direct as fallback
-                try {
-                     const response = await fetch(url, { signal: controller.signal });
-                     if (!response.ok) throw new Error(`Direct fetch failed: ${response.status}`);
-                     blob = await response.blob();
-                } catch(e) {
-                     throw new Error(`Failed to download PDF: ${error instanceof Error ? error.message : String(error)}`);
-                }
+                if (error.name === 'AbortError') throw new Error("Download timed out after 30s");
+                throw new Error(`Failed to download PDF: ${error instanceof Error ? error.message : String(error)}`);
             } finally {
                 clearTimeout(timeoutId);
             }
@@ -90,7 +82,14 @@ export const useLessonGeneration = (allSlos: SLO[], contextPdfs: ContextPdf[]) =
                 config: { displayName: filename, mimeType: 'application/pdf' }
             });
             
-            const uri = uploadResponse.uri;
+            // Robustly get the URI
+            const uri = (uploadResponse as any).file?.uri || uploadResponse.uri;
+            
+            if (!uri) {
+                console.error("Upload response:", uploadResponse);
+                throw new Error("Upload successful but no URI returned from Gemini API.");
+            }
+
             // Cache result in IndexedDB
             await set(url, uri); 
             return uri;
