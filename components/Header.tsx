@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { BrandIcon, MenuIcon, MoonIcon, SunIcon } from './icons/MiscIcons';
+import { AtomIcon, MenuIcon, MoonIcon, SunIcon } from './icons/MiscIcons';
 
 type Theme = 'light' | 'dark';
 
@@ -23,7 +23,7 @@ const Header: React.FC<HeaderProps> = ({ directoryName, theme, onToggleTheme, on
             </button>
             <div className="flex items-center gap-3">
                 <div className="w-10 h-10 bg-gradient-to-tr from-brand-primary to-cyan-400 rounded-xl flex items-center justify-center text-white shadow-lg shadow-brand-primary/20">
-                    <BrandIcon className="w-6 h-6" />
+                    <AtomIcon className="w-6 h-6" />
                 </div>
                 <h1 className="text-xl font-bold text-brand-text-light hidden sm:block tracking-tight">Lesson Plan AI</h1>
             </div>

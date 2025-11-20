@@ -32,12 +32,11 @@ export const useLessonGeneration = (allSlos: SLO[], contextPdfs: ContextPdf[]) =
     }, []);
 
     const urlToPart = useCallback(async (url: string): Promise<Part> => {
-        // 1. Check IndexedDB for cached file URI
+        // 1. Check IndexedDB for cached Base64 data
         try {
-            const cachedUri = await get<string>(url);
-            if (cachedUri) {
-                // console.log(`[Cache Hit] Using cached URI for: ${url}`);
-                return { fileData: { mimeType: 'application/pdf', fileUri: cachedUri } };
+            const cachedBase64 = await get<string>(url);
+            if (cachedBase64) {
+                return { inlineData: { mimeType: 'application/pdf', data: cachedBase64 } };
             }
         } catch (e) {
             console.warn('Failed to read from cache', e);
@@ -45,62 +44,59 @@ export const useLessonGeneration = (allSlos: SLO[], contextPdfs: ContextPdf[]) =
 
         // 2. Deduplication for in-flight requests
         if (fetchPromisesRef.current.has(url)) {
-            const uri = await fetchPromisesRef.current.get(url)!;
-             return { fileData: { mimeType: 'application/pdf', fileUri: uri } };
+            const base64 = await fetchPromisesRef.current.get(url)!;
+             return { inlineData: { mimeType: 'application/pdf', data: base64 } };
         }
 
-        const downloadAndUpload = async (): Promise<string> => {
-            let blob: Blob | null = null;
+        const downloadWithRetry = async (attemptsLeft: number): Promise<string> => {
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout
+            // Increased timeout to 180s (3 mins) for large files/slow proxy
+            const timeoutId = setTimeout(() => controller.abort(), 180000);
 
             try {
-                // Attempt direct fetch (Raw GitHub or enabled CORS source)
                 const response = await fetch(url, { signal: controller.signal });
                 if (!response.ok) {
                      throw new Error(`Fetch failed: ${response.status} ${response.statusText}`);
                 }
-                blob = await response.blob();
+                const blob = await response.blob();
+                
+                if (blob.size < 1000) {
+                     throw new Error(`Downloaded file is too small (${blob.size} bytes), likely invalid.`);
+                }
+                if (blob.type && blob.type.includes('text/html')) {
+                     throw new Error(`Downloaded file appears to be HTML, not PDF. Proxy may have failed.`);
+                }
+
+                const base64 = await new Promise<string>((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.readAsDataURL(blob);
+                    reader.onload = () => resolve((reader.result as string).split(',')[1]);
+                    reader.onerror = (error) => reject(error);
+                });
+
+                // Cache result in IndexedDB
+                await set(url, base64); 
+                return base64;
+
             } catch (error: any) {
-                if (error.name === 'AbortError') throw new Error("Download timed out after 30s");
-                throw new Error(`Failed to download PDF: ${error instanceof Error ? error.message : String(error)}`);
+                if (attemptsLeft > 0) {
+                    console.warn(`Download failed for ${url.split('/').pop()}. Retrying... (${attemptsLeft} attempts left). Error: ${error.message}`);
+                    await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2s before retry
+                    return downloadWithRetry(attemptsLeft - 1);
+                }
+                if (error.name === 'AbortError') throw new Error("Download timed out after 180s");
+                throw error;
             } finally {
                 clearTimeout(timeoutId);
             }
-
-            if (!blob || blob.size < 1000) {
-                throw new Error(`Downloaded file is too small (${blob?.size} bytes), likely invalid.`);
-            }
-
-            // Upload to Gemini
-            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
-            const filename = url.split('/').pop()?.split('?')[0] || 'textbook.pdf';
-            const file = new File([blob], filename, { type: 'application/pdf' });
-
-            const uploadResponse = await ai.files.upload({
-                file: file,
-                config: { displayName: filename, mimeType: 'application/pdf' }
-            });
-            
-            // Robustly get the URI
-            const uri = (uploadResponse as any).file?.uri || uploadResponse.uri;
-            
-            if (!uri) {
-                console.error("Upload response:", uploadResponse);
-                throw new Error("Upload successful but no URI returned from Gemini API.");
-            }
-
-            // Cache result in IndexedDB
-            await set(url, uri); 
-            return uri;
         };
 
-        const promise = downloadAndUpload();
+        const promise = downloadWithRetry(2); // 2 retries = 3 total attempts
         fetchPromisesRef.current.set(url, promise);
 
         try {
-            const uri = await promise;
-            return { fileData: { mimeType: 'application/pdf', fileUri: uri } };
+            const base64 = await promise;
+            return { inlineData: { mimeType: 'application/pdf', data: base64 } };
         } catch (error) {
              throw new Error(`Failed to process PDF ${url.split('/').pop()}: ${error instanceof Error ? error.message : String(error)}`);
         } finally {
@@ -118,12 +114,14 @@ export const useLessonGeneration = (allSlos: SLO[], contextPdfs: ContextPdf[]) =
                     if (pdf.file) {
                         part = await fileToPart(pdf.file);
                     } else if (pdf.url) {
+                        setLogMessages(prev => [...prev, `Downloading context: ${pdf.name}...`]);
                         part = await urlToPart(pdf.url);
                     }
                     if (part) contextFileParts.push(part);
                 } catch (e) {
                     console.error(`Error processing ${pdf.name}`, e);
-                    setLogMessages(prev => [...prev, `ERROR processing ${pdf.name}: ${e instanceof Error ? e.message : 'Unknown error'}`]);
+                    setLogMessages(prev => [...prev, `WARN: ${e instanceof Error ? e.message : 'Unknown error processing PDF'}`]);
+                    // Continue without this file instead of halting generation
                 }
             }
         }
