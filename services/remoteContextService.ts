@@ -6,8 +6,9 @@ export interface RemotePdf {
     url: string;
 }
 
-// Base URL for the Raw GitHub Content - Fixes CORS issues with Release downloads
-const BASE_URL = 'https://raw.githubusercontent.com/abdulahadattar/STBB-BOOKS/main/';
+// Using corsproxy.io to bypass GitHub Releases CORS restriction
+// Target: https://github.com/abdulahadattar/STBB-BOOKS/releases/download/STBB/
+const BASE_URL = 'https://corsproxy.io/?https://github.com/abdulahadattar/STBB-BOOKS/releases/download/STBB/';
 
 const fileNames = [
     // Grade 9
