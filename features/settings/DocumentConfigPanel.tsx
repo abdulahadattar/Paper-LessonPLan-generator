@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { LessonPlanDocumentConfig, DEFAULT_DOCUMENT_CONFIG } from '../../config/export';
+import React, { useState, useEffect } from 'react';
+import { LessonPlanDocumentConfig, DEFAULT_DOCUMENT_CONFIG, GRADE_CONFIG, GradeLevel } from '../../config/export';
 import { CloseIcon } from '../../components/icons/MiscIcons';
 
 interface DocumentConfigPanelProps {
@@ -12,8 +12,26 @@ interface DocumentConfigPanelProps {
 const DocumentConfigPanel: React.FC<DocumentConfigPanelProps> = ({ config, onUpdate, onReset, onClose }) => {
     const [localConfig, setLocalConfig] = useState<LessonPlanDocumentConfig>(config);
 
+    useEffect(() => {
+        setLocalConfig(config);
+    }, [config]);
+
     const handleChange = (field: keyof LessonPlanDocumentConfig, value: string) => {
         setLocalConfig(prev => ({ ...prev, [field]: value }));
+    };
+
+    const handleGradeChange = (grade: GradeLevel) => {
+        const subjects = GRADE_CONFIG[grade].subjects;
+        const defaultSubject = subjects[0]?.value || '';
+        setLocalConfig(prev => ({
+            ...prev,
+            gradeLevel: grade,
+            subject: defaultSubject,
+        }));
+    };
+
+    const handleSubjectChange = (subject: string) => {
+        setLocalConfig(prev => ({ ...prev, subject }));
     };
 
     const handleThemeChange = (field: keyof LessonPlanDocumentConfig['theme'], value: string | number) => {
@@ -23,13 +41,10 @@ const DocumentConfigPanel: React.FC<DocumentConfigPanelProps> = ({ config, onUpd
         }));
     };
 
-    const handleFontSizeChange = (field: keyof LessonPlanDocumentConfig['theme']['fontSize'], value: number) => {
+    const handleSectionToggle = (section: keyof LessonPlanDocumentConfig['sectionVisibility']) => {
         setLocalConfig(prev => ({
             ...prev,
-            theme: {
-                ...prev.theme,
-                fontSize: { ...prev.theme.fontSize, [field]: value }
-            }
+            sectionVisibility: { ...prev.sectionVisibility, [section]: !prev.sectionVisibility[section] }
         }));
     };
 
@@ -44,6 +59,8 @@ const DocumentConfigPanel: React.FC<DocumentConfigPanelProps> = ({ config, onUpd
         onClose();
     };
 
+    const currentSubjects = GRADE_CONFIG[localConfig.gradeLevel]?.subjects || [];
+
     return (
         <div className="fixed inset-0 bg-black/50 z-[200] flex items-center justify-center p-4">
             <div className="bg-brand-surface rounded-2xl shadow-2xl border border-brand-border w-full max-w-lg max-h-[90vh] overflow-y-auto">
@@ -55,6 +72,36 @@ const DocumentConfigPanel: React.FC<DocumentConfigPanelProps> = ({ config, onUpd
                 </div>
 
                 <div className="p-6 space-y-6">
+                    <div>
+                        <h3 className="text-sm font-bold text-brand-text-medium uppercase tracking-wider mb-3">Class & Subject</h3>
+                        <div className="space-y-3">
+                            <div>
+                                <label className="block text-xs font-medium text-brand-text-medium mb-1">Grade Level</label>
+                                <select
+                                    value={localConfig.gradeLevel}
+                                    onChange={(e) => handleGradeChange(e.target.value as GradeLevel)}
+                                    className="w-full px-3 py-2 bg-brand-bg border border-brand-border rounded-lg text-sm text-brand-text-light focus:ring-2 focus:ring-brand-primary focus:border-brand-primary outline-none"
+                                >
+                                    {Object.keys(GRADE_CONFIG).map(grade => (
+                                        <option key={grade} value={grade}>{grade}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-medium text-brand-text-medium mb-1">Subject</label>
+                                <select
+                                    value={localConfig.subject}
+                                    onChange={(e) => handleSubjectChange(e.target.value)}
+                                    className="w-full px-3 py-2 bg-brand-bg border border-brand-border rounded-lg text-sm text-brand-text-light focus:ring-2 focus:ring-brand-primary focus:border-brand-primary outline-none"
+                                >
+                                    {currentSubjects.map(subject => (
+                                        <option key={subject.value} value={subject.value}>{subject.label}</option>
+                                    ))}
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
                     <div>
                         <h3 className="text-sm font-bold text-brand-text-medium uppercase tracking-wider mb-3">Header Information</h3>
                         <div className="space-y-3">
@@ -73,6 +120,7 @@ const DocumentConfigPanel: React.FC<DocumentConfigPanelProps> = ({ config, onUpd
                                     type="text"
                                     value={localConfig.teacherName}
                                     onChange={(e) => handleChange('teacherName', e.target.value)}
+                                    placeholder="Leave empty to hide"
                                     className="w-full px-3 py-2 bg-brand-bg border border-brand-border rounded-lg text-sm text-brand-text-light focus:ring-2 focus:ring-brand-primary focus:border-brand-primary outline-none"
                                 />
                             </div>
@@ -92,6 +140,7 @@ const DocumentConfigPanel: React.FC<DocumentConfigPanelProps> = ({ config, onUpd
                                         type="text"
                                         value={localConfig.period}
                                         onChange={(e) => handleChange('period', e.target.value)}
+                                        placeholder="e.g. 1"
                                         className="w-full px-3 py-2 bg-brand-bg border border-brand-border rounded-lg text-sm text-brand-text-light focus:ring-2 focus:ring-brand-primary focus:border-brand-primary outline-none"
                                     />
                                 </div>
@@ -101,10 +150,36 @@ const DocumentConfigPanel: React.FC<DocumentConfigPanelProps> = ({ config, onUpd
                                         type="text"
                                         value={localConfig.dateTimeline}
                                         onChange={(e) => handleChange('dateTimeline', e.target.value)}
+                                        placeholder="Leave empty to hide"
                                         className="w-full px-3 py-2 bg-brand-bg border border-brand-border rounded-lg text-sm text-brand-text-light focus:ring-2 focus:ring-brand-primary focus:border-brand-primary outline-none"
                                     />
                                 </div>
                             </div>
+                        </div>
+                    </div>
+
+                    <div>
+                        <h3 className="text-sm font-bold text-brand-text-medium uppercase tracking-wider mb-3">Visible Sections</h3>
+                        <p className="text-xs text-brand-text-medium mb-3">Toggle sections to show or hide in generated documents</p>
+                        <div className="space-y-3">
+                            {Object.entries(localConfig.sectionVisibility).map(([section, enabled]) => (
+                                <div key={section} className="flex items-center justify-between">
+                                    <label className="text-sm text-brand-text-light capitalize">{section}</label>
+                                    <button
+                                        type="button"
+                                        onClick={() => handleSectionToggle(section as keyof LessonPlanDocumentConfig['sectionVisibility'])}
+                                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                                            enabled ? 'bg-brand-primary' : 'bg-brand-border'
+                                        }`}
+                                    >
+                                        <span
+                                            className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                                                enabled ? 'translate-x-6' : 'translate-x-1'
+                                            }`}
+                                        />
+                                    </button>
+                                </div>
+                            ))}
                         </div>
                     </div>
 

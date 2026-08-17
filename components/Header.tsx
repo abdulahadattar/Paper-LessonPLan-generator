@@ -25,7 +25,10 @@ const Header: React.FC<HeaderProps> = ({ directoryName, theme, onToggleTheme, on
                 <div className="w-10 h-10 bg-gradient-to-tr from-brand-primary to-cyan-400 rounded-xl flex items-center justify-center text-white shadow-lg shadow-brand-primary/20">
                     <AtomIcon className="w-6 h-6" />
                 </div>
-                <h1 className="text-xl font-bold text-brand-text-light hidden sm:block tracking-tight">Lesson Plan AI</h1>
+                <div>
+                    <h1 className="text-xl font-bold text-brand-text-light hidden sm:block tracking-tight">Lesson Planner</h1>
+                    <p className="text-xs text-brand-text-medium hidden sm:block">Peoples Higher Secondary School Jamshoro</p>
+                </div>
             </div>
         </div>
 

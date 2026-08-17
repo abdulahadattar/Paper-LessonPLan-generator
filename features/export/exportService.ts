@@ -16,7 +16,7 @@ import saveAs from 'file-saver';
 import { LessonPlan } from '../../types/lesson';
 import { formatFileName } from '../../lib/export';
 import { parseTextForDocx, parseTextForPdf } from '../../lib/text';
-import { DEFAULT_DOCUMENT_CONFIG, PDF_STYLES } from '../../config/export';
+import { DEFAULT_DOCUMENT_CONFIG, PDF_STYLES, GradeLevel } from '../../config/export';
 
 // Declaration for pdfmake, which is loaded via a script tag in index.html
 declare const pdfMake: any;
@@ -82,62 +82,83 @@ function createSectionHeading(title: string, config: DocumentConfig = DEFAULT_DO
 }
 
 function createDocxContentForPlan(lessonPlan: LessonPlan, config: DocumentConfig = DEFAULT_DOCUMENT_CONFIG): (Paragraph | Table)[] {
-    const gradeShort = lessonPlan.gradeLevel.replace('Grade ', '').split(' ')[0];
+    const gradeShort = config.gradeLevel.replace('Grade ', '').split(' ')[0];
     const margin = config.margins.docx;
     
-    const headerTable = new Table({
-        width: { size: 100, type: WidthType.PERCENTAGE },
-        rows: [
-            new TableRow({
+    const headerRows: TableRow[] = [];
+    
+    headerRows.push(new TableRow({
+        children: [
+            new TableCell({
                 children: [
-                    new TableCell({
-                        children: [
-                            new Paragraph({ children: [createHeaderRun(config.schoolName, true, 24, config)], alignment: AlignmentType.CENTER }),
-                            new Paragraph({ children: [createHeaderRun(config.documentTitle, true, 36, config)], alignment: AlignmentType.CENTER, spacing: { after: 50 } }),
-                        ],
-                        columnSpan: 4,
-                        borders: { top: { style: 'single', size: 12 }, bottom: { style: 'single', size: 12 }, left: { style: 'none'}, right: { style: 'none'} }
-                    }),
+                    new Paragraph({ children: [createHeaderRun(config.schoolName, true, 24, config)], alignment: AlignmentType.CENTER }),
+                    new Paragraph({ children: [createHeaderRun(config.documentTitle, true, 36, config)], alignment: AlignmentType.CENTER, spacing: { after: 50 } }),
                 ],
-            }),
-            new TableRow({
-                children: [
-                    new TableCell({ children: [new Paragraph({ children: [createHeaderRun(`GRADE: ${gradeShort}`, true, 24, config)] })], verticalAlign: VerticalAlign.CENTER, borders: {top: {style: 'none'}, bottom: {style: 'none'}, left: {style: 'none'}, right: {style: 'none'}} }),
-                    new TableCell({ children: [new Paragraph({ children: [createHeaderRun(`SUBJECT: ${lessonPlan.subject}`, true, 24, config)] })], verticalAlign: VerticalAlign.CENTER, borders: {top: {style: 'none'}, bottom: {style: 'none'}, left: {style: 'none'}, right: {style: 'none'}} }),
-                    new TableCell({ children: [new Paragraph({ children: [createHeaderRun(`PERIODS: ${config.period}`, true, 24, config)] })], verticalAlign: VerticalAlign.CENTER, borders: {top: {style: 'none'}, bottom: {style: 'none'}, left: {style: 'none'}, right: {style: 'none'}} }),
-                    new TableCell({ children: [new Paragraph({ children: [createHeaderRun(`DATE/TIMELINE: ${config.dateTimeline}`, true, 24, config)] })], verticalAlign: VerticalAlign.CENTER, borders: {top: {style: 'none'}, bottom: {style: 'none'}, left: {style: 'none'}, right: {style: 'none'}} }),
-                ],
-            }),
-            new TableRow({
-                children: [ new TableCell({ children: [new Paragraph({ children: [createHeaderRun(`LESSON TOPIC: ${lessonPlan.title}`, false, 24, config)] })], columnSpan: 4, verticalAlign: VerticalAlign.CENTER, borders: { top: { style: 'single', size: 6 }, bottom: {style: 'none'}, left: {style: 'none'}, right: {style: 'none'} } })],
-            }),
-            new TableRow({
-                children: [ new TableCell({ children: [new Paragraph({ children: [createHeaderRun(`LEARNING OBJECTIVE: ${lessonPlan.objective}`, false, 24, config)] })], columnSpan: 4, verticalAlign: VerticalAlign.CENTER, borders: { top: { style: 'single', size: 2 }, bottom: {style: 'none'}, left: {style: 'none'}, right: {style: 'none'} } })],
-            }),
-            new TableRow({
-                children: [
-                    new TableCell({
-                        children: [ new Paragraph({ children: [createHeaderRun(`TEACHER: `, false, 24, config), createHeaderRun(config.teacherName, true, 24, config)] })],
-                        columnSpan: 4, verticalAlign: VerticalAlign.CENTER, borders: { top: { style: 'single', size: 2 }, bottom: { style: 'single', size: 12 }, left: {style: 'none'}, right: {style: 'none'} }
-                    }),
-                ],
+                columnSpan: 4,
+                borders: { top: { style: 'single', size: 12 }, bottom: { style: 'single', size: 12 }, left: { style: 'none'}, right: { style: 'none'} }
             }),
         ],
+    }));
+
+    const infoRowChildren: TableCell[] = [];
+    infoRowChildren.push(new TableCell({ children: [new Paragraph({ children: [createHeaderRun(`GRADE: ${config.gradeLevel}`, true, 24, config)] })], verticalAlign: VerticalAlign.CENTER, borders: {top: {style: 'none'}, bottom: {style: 'none'}, left: {style: 'none'}, right: {style: 'none'}} }));
+    infoRowChildren.push(new TableCell({ children: [new Paragraph({ children: [createHeaderRun(`SUBJECT: ${config.subject}`, true, 24, config)] })], verticalAlign: VerticalAlign.CENTER, borders: {top: {style: 'none'}, bottom: {style: 'none'}, left: {style: 'none'}, right: {style: 'none'}} }));
+    if (config.period) {
+        infoRowChildren.push(new TableCell({ children: [new Paragraph({ children: [createHeaderRun(`PERIODS: ${config.period}`, true, 24, config)] })], verticalAlign: VerticalAlign.CENTER, borders: {top: {style: 'none'}, bottom: {style: 'none'}, left: {style: 'none'}, right: {style: 'none'}} }));
+    }
+    if (config.dateTimeline) {
+        infoRowChildren.push(new TableCell({ children: [new Paragraph({ children: [createHeaderRun(`DATE/TIMELINE: ${config.dateTimeline}`, true, 24, config)] })], verticalAlign: VerticalAlign.CENTER, borders: {top: {style: 'none'}, bottom: {style: 'none'}, left: {style: 'none'}, right: {style: 'none'}} }));
+    }
+    headerRows.push(new TableRow({ children: infoRowChildren }));
+
+    headerRows.push(new TableRow({
+        children: [ new TableCell({ children: [new Paragraph({ children: [createHeaderRun(`LESSON TOPIC: ${lessonPlan.title}`, false, 24, config)] })], columnSpan: 4, verticalAlign: VerticalAlign.CENTER, borders: { top: { style: 'single', size: 6 }, bottom: {style: 'none'}, left: {style: 'none'}, right: {style: 'none'} } })],
+    }));
+
+    if (config.sectionVisibility.objective) {
+        headerRows.push(new TableRow({
+            children: [ new TableCell({ children: [new Paragraph({ children: [createHeaderRun(`LEARNING OBJECTIVE: ${lessonPlan.objective}`, false, 24, config)] })], columnSpan: 4, verticalAlign: VerticalAlign.CENTER, borders: { top: { style: 'single', size: 2 }, bottom: {style: 'none'}, left: {style: 'none'}, right: {style: 'none'} } })],
+        }));
+    }
+
+    if (config.teacherName) {
+        headerRows.push(new TableRow({
+            children: [
+                new TableCell({
+                    children: [ new Paragraph({ children: [createHeaderRun(`TEACHER: `, false, 24, config), createHeaderRun(config.teacherName, true, 24, config)] })],
+                    columnSpan: 4, verticalAlign: VerticalAlign.CENTER, borders: { top: { style: 'single', size: 2 }, bottom: { style: 'single', size: 12 }, left: {style: 'none'}, right: {style: 'none'} }
+                }),
+            ],
+        }));
+    }
+
+    const headerTable = new Table({
+        width: { size: 100, type: WidthType.PERCENTAGE },
+        rows: headerRows,
     });
 
     const children: (Paragraph | Table)[] = [headerTable];
-    children.push(createSectionHeading(config.sectionHeaders.resources, config));
-    children.push(...(lessonPlan.materials.length > 0 ? createBulletList(lessonPlan.materials) : [createRichParagraph('No materials required.')]));
-    children.push(createSectionHeading(config.sectionHeaders.procedure, config));
-    lessonPlan.activities.forEach(activity => {
-        children.push(new Paragraph({ 
-            children: [ new TextRun({ text: `${activity.name.toUpperCase()} (${activity.duration} mins)`, bold: true, size: 24, font: config.theme.font })],
-            spacing: { before: 200, after: 100 }
-        }));
-        children.push(createRichParagraph(activity.description));
-    });
-    children.push(createSectionHeading(config.sectionHeaders.homework, config));
-    children.push(createRichParagraph(lessonPlan.homework));
+    
+    if (config.sectionVisibility.resources) {
+        children.push(createSectionHeading(config.sectionHeaders.resources, config));
+        children.push(...(lessonPlan.materials.length > 0 ? createBulletList(lessonPlan.materials) : [createRichParagraph('No materials required.')]));
+    }
+    
+    if (config.sectionVisibility.procedure) {
+        children.push(createSectionHeading(config.sectionHeaders.procedure, config));
+        lessonPlan.activities.forEach(activity => {
+            children.push(new Paragraph({ 
+                children: [ new TextRun({ text: `${activity.name.toUpperCase()} (${activity.duration} mins)`, bold: true, size: 24, font: config.theme.font })],
+                spacing: { before: 200, after: 100 }
+            }));
+            children.push(createRichParagraph(activity.description));
+        });
+    }
+    
+    if (config.sectionVisibility.homework) {
+        children.push(createSectionHeading(config.sectionHeaders.homework, config));
+        children.push(createRichParagraph(lessonPlan.homework));
+    }
 
     return children;
 }
@@ -147,48 +168,71 @@ function createPdfRichText(text: string) {
 }
 
 function createPdfContentForPlan(lessonPlan: LessonPlan, config: DocumentConfig = DEFAULT_DOCUMENT_CONFIG): any[] {
-    const gradeShort = lessonPlan.gradeLevel.replace('Grade ', '').split(' ')[0];
+    const gradeShort = config.gradeLevel.replace('Grade ', '').split(' ')[0];
     const margins = config.margins.pdf;
+
+    const bodyRows: any[] = [
+        [{ colSpan: 4, text: `${config.schoolName}\n${config.documentTitle}`, style: 'headerTableTitle' }, {}, {}, {}],
+    ];
+
+    const infoRow: any[] = [
+        { text: [{ text: 'GRADE: ', bold: true }, config.gradeLevel], style: 'headerTableSub' }, 
+        { text: [{ text: 'SUBJECT: ', bold: true }, config.subject], style: 'headerTableSub' }, 
+    ];
+    if (config.period) {
+        infoRow.push({ text: [{ text: 'PERIODS: ', bold: true }, config.period], style: 'headerTableSub' });
+    }
+    if (config.dateTimeline) {
+        infoRow.push({ text: [{ text: 'DATE/TIMELINE: ', bold: true }, config.dateTimeline], style: 'headerTableSub' });
+    }
+    bodyRows.push(infoRow);
+
+    bodyRows.push([{ colSpan: 4, text: [{ text: 'LESSON TOPIC: ', bold: true }, lessonPlan.title], style: 'headerTableBody' }, {}, {}, {}]);
+    
+    if (config.sectionVisibility.objective) {
+        bodyRows.push([{ colSpan: 4, text: [{ text: 'LEARNING OBJECTIVE: ', bold: true }, lessonPlan.objective], style: 'headerTableBody' }, {}, {}, {}]);
+    }
+    
+    if (config.teacherName) {
+        bodyRows.push([{ colSpan: 4, text: [{ text: 'TEACHER: ', bold: true }, config.teacherName], style: 'headerTableBody' }, {}, {}, {}]);
+    }
 
     const headerTable = {
         layout: 'lessonPlanHeader',
         table: {
             widths: ['auto', '*', 'auto', '*'],
-            body: [
-                [{ colSpan: 4, text: `${config.schoolName}\n${config.documentTitle}`, style: 'headerTableTitle' }, {}, {}, {}],
-                [
-                    { text: [{ text: 'GRADE: ', bold: true }, gradeShort], style: 'headerTableSub' }, 
-                    { text: [{ text: 'SUBJECT: ', bold: true }, { text: lessonPlan.subject, bold: true }], style: 'headerTableSub' }, 
-                    { text: [{ text: 'PERIODS: ', bold: true }, { text: config.period, bold: true }], style: 'headerTableSub' }, 
-                    { text: [{ text: 'DATE/TIMELINE: ', bold: true }, config.dateTimeline], style: 'headerTableSub' }
-                ],
-                [{ colSpan: 4, text: [{ text: 'LESSON TOPIC: ', bold: true }, lessonPlan.title], style: 'headerTableBody' }, {}, {}, {}],
-                [{ colSpan: 4, text: [{ text: 'LEARNING OBJECTIVE: ', bold: true }, lessonPlan.objective], style: 'headerTableBody' }, {}, {}, {}],
-                [{ colSpan: 4, text: [{ text: 'TEACHER: ', bold: true }, { text: config.teacherName, bold: true }], style: 'headerTableBody' }, {}, {}, {}],
-            ]
+            body: bodyRows
         },
         margin: [0, 0, 0, 10] 
     };
     
-    const resourcesSection = [
-        { text: config.sectionHeaders.resources, style: 'sectionHeader' },
-        { ul: lessonPlan.materials.length > 0 ? lessonPlan.materials.map(m => createPdfRichText(m)) : [{ text: 'No materials required.', style: 'body' }] },
-    ];
+    const contentSections: any[] = [headerTable];
+    
+    if (config.sectionVisibility.resources) {
+        contentSections.push(
+            { text: config.sectionHeaders.resources, style: 'sectionHeader' },
+            { ul: lessonPlan.materials.length > 0 ? lessonPlan.materials.map(m => createPdfRichText(m)) : [{ text: 'No materials required.', style: 'body' }] },
+        );
+    }
+    
+    if (config.sectionVisibility.procedure) {
+        contentSections.push(
+            { text: config.sectionHeaders.procedure, style: 'sectionHeader' },
+            ...lessonPlan.activities.flatMap(activity => ([
+                { text: `${activity.name.toUpperCase()} (${activity.duration} mins)`, bold: true, margin: [0, 8, 0, 4] },
+                createPdfRichText(activity.description)
+            ])),
+        );
+    }
+    
+    if (config.sectionVisibility.homework) {
+        contentSections.push(
+            { text: config.sectionHeaders.homework, style: 'sectionHeader' },
+            createPdfRichText(lessonPlan.homework),
+        );
+    }
 
-    const procedureSection = [
-        { text: config.sectionHeaders.procedure, style: 'sectionHeader' },
-        ...lessonPlan.activities.flatMap(activity => ([
-            { text: `${activity.name.toUpperCase()} (${activity.duration} mins)`, bold: true, margin: [0, 8, 0, 4] },
-            createPdfRichText(activity.description)
-        ])),
-    ];
-
-    const homeworkSection = [
-        { text: config.sectionHeaders.homework, style: 'sectionHeader' },
-        createPdfRichText(lessonPlan.homework),
-    ];
-
-    return [headerTable, ...resourcesSection, ...procedureSection, ...homeworkSection];
+    return contentSections;
 }
 
 /**
