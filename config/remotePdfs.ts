@@ -1,17 +1,6 @@
+export const REMOTE_PDF_BASE_URL = 'https://corsproxy.io/?https://github.com/abdulahadattar/STBB-BOOKS/releases/download/STBB/';
 
-export interface RemotePdf {
-    name: string;
-    grade: string;
-    unit: string;
-    url: string;
-}
-
-// Using corsproxy.io to bypass GitHub Releases CORS restriction
-// Target: https://github.com/abdulahadattar/STBB-BOOKS/releases/download/STBB/
-const BASE_URL = 'https://corsproxy.io/?https://github.com/abdulahadattar/STBB-BOOKS/releases/download/STBB/';
-
-const fileNames = [
-    // Grade 9
+export const REMOTE_PDF_FILE_NAMES = [
     "Physics.Grade.9.Unit.1.PHYSICAL.QUANTITIES.AND.MEASUREMENT_.pdf",
     "Physics.Grade.9.Unit.2.KINEMATICS_.pdf",
     "Physics.Grade.9.Unit.3.DYNAMICS_.pdf",
@@ -21,8 +10,6 @@ const fileNames = [
     "Physics.Grade.9.Unit.7.PROPERTIES.OF.MATTER_.pdf",
     "Physics.Grade.9.Unit.8.ENERGY.SOURCES.AND.TRANSFER.OF.ENERGY_.pdf",
     "Physics.Grade.9.Unit.9.THERMAL.PROPERTIES.OF.MATTER_.pdf",
-    
-    // Grade 10
     "Physics.Grade.10.Unit.10.General.Waves.Properties_.pdf",
     "Physics.Grade.10.Unit.11.Sound_.pdf",
     "Physics.Grade.10.Unit.12.Electromagnetic.Spectrum_.pdf",
@@ -34,8 +21,6 @@ const fileNames = [
     "Physics.Grade.10.Unit.18.Information.and.Communication.Technology.ICT_.pdf",
     "Physics.Grade.10.Unit.19.Atomic.Structure_.pdf",
     "Physics.Grade.10.Unit.20.Nuclear.Structure_.pdf",
-
-    // Grade 11
     "Physics.Grade.11.Unit.01.Measurements_.pdf",
     "Physics.Grade.11.Unit.02.Kinematics_.pdf",
     "Physics.Grade.11.Unit.03.Dynamics_.pdf",
@@ -51,8 +36,6 @@ const fileNames = [
     "Physics.Grade.11.Unit.12.Acoustics_.pdf",
     "Physics.Grade.11.Unit.13.Physical.Optics_.pdf",
     "Physics.Grade.11.Unit.14.Communication_.pdf",
-    
-    // Grade 12
     "Physics.Grade.12.Unit.15.Molecular.Theory.of.Gases_.pdf",
     "Physics.Grade.12.Unit.16.First.Law.of.Thermodynamics_.pdf",
     "Physics.Grade.12.Unit.17.Second.Law.of.Thermodynamics_.pdf",
@@ -68,21 +51,4 @@ const fileNames = [
     "Physics.Grade.12.Unit.26.Atomic.Physics_.pdf",
     "Physics.Grade.12.Unit.27.Nuclear.Physics_.pdf",
     "Physics.Grade.12.Unit.28.Particles.Physics_.pdf",
-];
-
-export const getRemotePdfs = (): RemotePdf[] => {
-    return fileNames.map(name => {
-        const gradeMatch = name.match(/Grade\.(\d+)/);
-        const unitMatch = name.match(/Unit\.(\d+)/);
-        if (gradeMatch && unitMatch) {
-            const originalUrl = `${BASE_URL}${name}`;
-            return {
-                name,
-                grade: `Grade ${gradeMatch[1]}`,
-                unit: unitMatch[1],
-                url: originalUrl
-            };
-        }
-        return null;
-    }).filter((pdf): pdf is RemotePdf => pdf !== null);
-};
+] as const;

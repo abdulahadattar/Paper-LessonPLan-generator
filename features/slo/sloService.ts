@@ -1,4 +1,4 @@
-import { SLO } from '../types';
+import { SLO } from '../../types/slo';
 
 /**
  * Loads the predefined SLO files from the SLOschema directory.

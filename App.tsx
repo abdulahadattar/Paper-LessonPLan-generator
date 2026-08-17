@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { ExportOption } from './types';
+import { ExportOption } from './types/export';
 import InputPanel from './components/InputPanel';
 import { InfoIcon, CloseIcon } from './components/icons/MiscIcons';
 import { WandIcon } from './components/icons/WandIcon';
@@ -9,9 +9,9 @@ import SloPanel from './components/SloPanel';
 import Header from './components/Header';
 import GenerationStatusPanel from './components/GenerationStatusPanel';
 
-// Hooks
-import { useSloData } from './hooks/useSloData';
-import { useLessonGeneration } from './hooks/useLessonGeneration';
+import { useSloData, loadInitialSlos } from './features/slo';
+import { useLessonGeneration, generateLessonPlan, getRemotePdfs } from './features/generation';
+import { exportAsDocx, exportAsPdf, exportMultipleLessonsAsDocx, exportMultipleLessonsAsPdf } from './features/export';
 
 type View = 'slo' | 'results';
 type Theme = 'light' | 'dark';
@@ -26,7 +26,7 @@ const App: React.FC = () => {
     directoryName, 
     contextPdfs, 
     handleDirectorySelected 
-  } = useSloData();
+  } = useSloData(loadInitialSlos, getRemotePdfs);
 
   const { 
     generateAllLessonPlans, 
@@ -37,7 +37,12 @@ const App: React.FC = () => {
     isComplete, 
     generatedPlans, 
     clearLogs 
-  } = useLessonGeneration(allSlos, contextPdfs);
+  } = useLessonGeneration(allSlos, contextPdfs, generateLessonPlan, {
+    exportAsDocx,
+    exportAsPdf,
+    exportMultipleLessonsAsDocx,
+    exportMultipleLessonsAsPdf
+  });
 
   // UI State
   const [selectedSloUniqueIds, setSelectedSloUniqueIds] = useState<string[]>([]);

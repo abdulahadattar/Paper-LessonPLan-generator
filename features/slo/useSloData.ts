@@ -1,10 +1,22 @@
 
 import { useState, useEffect } from 'react';
-import { SLO, UnitsByGrade, ContextPdf } from '../types';
-import { loadInitialSlos } from '../services/sloService';
-import { getRemotePdfs } from '../services/remoteContextService';
+import { SLO, UnitsByGrade } from '../../types/slo';
+import { ContextPdf } from '../../types/context';
+import { loadInitialSlos } from './sloService';
+import { getRemotePdfs } from '../generation/remoteContextService';
+import { parseGradeAndUnitFromFileName } from '../../lib/pdf';
 
-export const useSloData = () => {
+/**
+ * Hook for managing SLO data and context PDFs.
+ * 
+ * @param sloService - Optional custom SLO service implementation for testing
+ * @param remoteContextService - Optional custom remote context service implementation for testing
+ * @returns SLO data, loading state, and handlers
+ */
+export const useSloData = (
+    sloService: typeof loadInitialSlos = loadInitialSlos,
+    remoteContextService: typeof getRemotePdfs = getRemotePdfs
+) => {
     const [unitsByGrade, setUnitsByGrade] = useState<UnitsByGrade>({});
     const [allSlos, setAllSlos] = useState<SLO[]>([]);
     const [isParsing, setIsParsing] = useState(true);
@@ -14,8 +26,7 @@ export const useSloData = () => {
     useEffect(() => {
         const fetchInitialData = async () => {
             setIsParsing(true);
-            // Load SLOs
-            const parsedSlos = await loadInitialSlos();
+            const parsedSlos = await sloService();
             const slosWithUniqueIds = parsedSlos.map((slo, index) => ({
                 ...slo,
                 uniqueId: `${slo.SLO_ID}_${index}`
@@ -32,8 +43,7 @@ export const useSloData = () => {
             }, {} as UnitsByGrade);
             setUnitsByGrade(grouped);
             
-            // Load remote PDFs by default
-            const remotePdfs = getRemotePdfs();
+            const remotePdfs = remoteContextService();
             setContextPdfs(remotePdfs.map(p => ({
                 name: p.name,
                 grade: p.grade,
@@ -45,7 +55,7 @@ export const useSloData = () => {
             setIsParsing(false);
         };
         fetchInitialData();
-    }, []);
+    }, [sloService, remoteContextService]);
 
     const handleDirectorySelected = (files: FileList) => {
         if (files.length > 0) {
@@ -61,12 +71,9 @@ export const useSloData = () => {
             const pdfs: ContextPdf[] = [];
             for (const file of fileArray) {
                 if (file.name.toLowerCase().endsWith('.pdf')) {
-                    const gradeMatch = file.name.match(/Grade (\d+)/i);
-                    const unitMatch = file.name.match(/Unit (\d+)/i);
-                    if (gradeMatch && unitMatch) {
-                        const grade = `Grade ${gradeMatch[1]}`;
-                        const unit = unitMatch[1];
-                        pdfs.push({ name: file.name, grade, unit, file });
+                    const parsed = parseGradeAndUnitFromFileName(file.name);
+                    if (parsed) {
+                        pdfs.push({ name: file.name, grade: parsed.grade, unit: parsed.unit, file });
                     }
                 }
             }

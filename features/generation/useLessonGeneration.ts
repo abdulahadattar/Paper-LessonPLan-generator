@@ -1,12 +1,36 @@
 
 import { useState, useRef, useCallback } from 'react';
 import { GoogleGenAI, Part } from '@google/genai';
-import { LessonPlan, SLO, ContextPdf, ExportOption } from '../types';
-import { generateLessonPlan } from '../services/geminiService';
-import { exportAsDocx, exportAsPdf, exportMultipleLessonsAsDocx, exportMultipleLessonsAsPdf, formatFileName } from '../services/exportService';
+import { LessonPlan } from '../../types/lesson';
+import { SLO } from '../../types/slo';
+import { ContextPdf } from '../../types/context';
+import { ExportOption } from '../../types/export';
+import { generateLessonPlan } from './geminiService';
+import { exportAsDocx, exportAsPdf, exportMultipleLessonsAsDocx, exportMultipleLessonsAsPdf } from '../export/exportService';
+import { formatFileName } from '../../lib/export';
+import { fileToPart as fileToPartUtil } from '../../lib/pdf';
 import { get, set } from 'idb-keyval';
 
-export const useLessonGeneration = (allSlos: SLO[], contextPdfs: ContextPdf[]) => {
+/**
+ * Hook for managing lesson plan generation.
+ * 
+ * @param allSlos - Array of all available SLOs
+ * @param contextPdfs - Array of context PDFs for RAG
+ * @param geminiService - Optional custom Gemini service for testing
+ * @param exportService - Optional custom export service for testing
+ * @returns Generation state and control methods
+ */
+export const useLessonGeneration = (
+    allSlos: SLO[], 
+    contextPdfs: ContextPdf[],
+    geminiService: typeof generateLessonPlan = generateLessonPlan,
+    exportService: {
+        exportAsDocx: typeof exportAsDocx;
+        exportAsPdf: typeof exportAsPdf;
+        exportMultipleLessonsAsDocx: typeof exportMultipleLessonsAsDocx;
+        exportMultipleLessonsAsPdf: typeof exportMultipleLessonsAsPdf;
+    } = { exportAsDocx, exportAsPdf, exportMultipleLessonsAsDocx, exportMultipleLessonsAsPdf }
+) => {
     const [isLoading, setIsLoading] = useState(false);
     const [generationProgress, setGenerationProgress] = useState<{ current: number; total: number } | null>(null);
     const [logMessages, setLogMessages] = useState<string[]>([]);
@@ -16,23 +40,11 @@ export const useLessonGeneration = (allSlos: SLO[], contextPdfs: ContextPdf[]) =
     const isCancelledRef = useRef(false);
     const fetchPromisesRef = useRef(new Map<string, Promise<string>>());
 
-    const fileToPart = useCallback(async (file: File): Promise<Part> => {
-        const base64 = await new Promise<string>((resolve, reject) => {
-            const reader = new FileReader();
-            reader.readAsDataURL(file);
-            reader.onload = () => resolve((reader.result as string).split(',')[1]);
-            reader.onerror = (error) => reject(error);
-        });
-        return {
-            inlineData: {
-                mimeType: file.type,
-                data: base64,
-            },
-        };
+    const fileToPartLocal = useCallback(async (file: File): Promise<Part> => {
+        return fileToPartUtil(file);
     }, []);
 
     const urlToPart = useCallback(async (url: string): Promise<Part> => {
-        // 1. Check IndexedDB for cached Base64 data
         try {
             const cachedBase64 = await get<string>(url);
             if (cachedBase64) {
@@ -42,7 +54,6 @@ export const useLessonGeneration = (allSlos: SLO[], contextPdfs: ContextPdf[]) =
             console.warn('Failed to read from cache', e);
         }
 
-        // 2. Deduplication for in-flight requests
         if (fetchPromisesRef.current.has(url)) {
             const base64 = await fetchPromisesRef.current.get(url)!;
              return { inlineData: { mimeType: 'application/pdf', data: base64 } };
@@ -50,7 +61,6 @@ export const useLessonGeneration = (allSlos: SLO[], contextPdfs: ContextPdf[]) =
 
         const downloadWithRetry = async (attemptsLeft: number): Promise<string> => {
             const controller = new AbortController();
-            // Increased timeout to 180s (3 mins) for large files/slow proxy
             const timeoutId = setTimeout(() => controller.abort(), 180000);
 
             try {
@@ -74,14 +84,13 @@ export const useLessonGeneration = (allSlos: SLO[], contextPdfs: ContextPdf[]) =
                     reader.onerror = (error) => reject(error);
                 });
 
-                // Cache result in IndexedDB
                 await set(url, base64); 
                 return base64;
 
             } catch (error: any) {
                 if (attemptsLeft > 0) {
                     console.warn(`Download failed for ${url.split('/').pop()}. Retrying... (${attemptsLeft} attempts left). Error: ${error.message}`);
-                    await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2s before retry
+                    await new Promise(resolve => setTimeout(resolve, 2000));
                     return downloadWithRetry(attemptsLeft - 1);
                 }
                 if (error.name === 'AbortError') throw new Error("Download timed out after 180s");
@@ -91,7 +100,7 @@ export const useLessonGeneration = (allSlos: SLO[], contextPdfs: ContextPdf[]) =
             }
         };
 
-        const promise = downloadWithRetry(2); // 2 retries = 3 total attempts
+        const promise = downloadWithRetry(2);
         fetchPromisesRef.current.set(url, promise);
 
         try {
@@ -112,7 +121,7 @@ export const useLessonGeneration = (allSlos: SLO[], contextPdfs: ContextPdf[]) =
                 try {
                     let part: Part | undefined;
                     if (pdf.file) {
-                        part = await fileToPart(pdf.file);
+                         part = await fileToPartUtil(pdf.file);
                     } else if (pdf.url) {
                         setLogMessages(prev => [...prev, `Downloading context: ${pdf.name}...`]);
                         part = await urlToPart(pdf.url);
@@ -121,12 +130,11 @@ export const useLessonGeneration = (allSlos: SLO[], contextPdfs: ContextPdf[]) =
                 } catch (e) {
                     console.error(`Error processing ${pdf.name}`, e);
                     setLogMessages(prev => [...prev, `WARN: ${e instanceof Error ? e.message : 'Unknown error processing PDF'}`]);
-                    // Continue without this file instead of halting generation
                 }
             }
         }
         return contextFileParts;
-    }, [contextPdfs, fileToPart, urlToPart]);
+    }, [contextPdfs, fileToPartLocal, urlToPart]);
 
     const generateAllLessonPlans = useCallback(async (selectedSloUniqueIds: string[], exportOption: ExportOption) => {
         isCancelledRef.current = false;
@@ -150,13 +158,13 @@ export const useLessonGeneration = (allSlos: SLO[], contextPdfs: ContextPdf[]) =
                     
                     if (attempt === 0) setLogMessages(prev => [...prev, `Preparing context for ${slo.SLO_ID}...`]);
                     const contextFileParts = await getContextPartsForSlo(slo.grade!, slo.Unit_Number);
-    
+        
                     if (contextFileParts.length === 0 && attempt === 0) {
                          setLogMessages(prev => [...prev, `WARN: No valid context PDF found for SLO ${slo.SLO_ID}. Generation will rely on internal knowledge.`]);
                     }
                     
                     if (attempt === 0) setLogMessages(prev => [...prev, `Generating lesson plan content...`]);
-                    const plan = await generateLessonPlan(slo, unitContextSlos, contextFileParts);
+                    const plan = await geminiService(slo, unitContextSlos, contextFileParts);
                     
                     plan.unitNumber = slo.Unit_Number;
                     
@@ -187,9 +195,9 @@ export const useLessonGeneration = (allSlos: SLO[], contextPdfs: ContextPdf[]) =
                 if (plan) {
                     allGeneratedPlans.push(plan);
                     setLogMessages(prev => [...prev, `Exporting individual files...`]);
-                    await exportAsDocx(plan, slo.SLO_ID);
+                    await exportService.exportAsDocx(plan, slo.SLO_ID);
                     await new Promise(resolve => setTimeout(resolve, 250));
-                    await exportAsPdf(plan, slo.SLO_ID);
+                    await exportService.exportAsPdf(plan, slo.SLO_ID);
                     await new Promise(resolve => setTimeout(resolve, 250));
                 }
             }
@@ -217,7 +225,7 @@ export const useLessonGeneration = (allSlos: SLO[], contextPdfs: ContextPdf[]) =
                     groups = new Map([['all_selected_plans', selectedSlos]]);
                     break;
             }
-    
+        
             setGenerationProgress({ current: 0, total: selectedSlos.length });
             let processedCount = 0;
     
@@ -244,11 +252,11 @@ export const useLessonGeneration = (allSlos: SLO[], contextPdfs: ContextPdf[]) =
                 if (generatedPlansForGroup.length > 0 && !wasCancelled) {
                     const fileName = formatFileName(groupName);
                     setLogMessages(prev => [...prev, `Combining and exporting ${fileName}.pdf...`]);
-                    await exportMultipleLessonsAsPdf(generatedPlansForGroup, fileName);
+                    await exportService.exportMultipleLessonsAsPdf(generatedPlansForGroup, fileName);
                     await new Promise(resolve => setTimeout(resolve, 250));
                     
                     setLogMessages(prev => [...prev, `Combining and exporting ${fileName}.docx...`]);
-                    await exportMultipleLessonsAsDocx(generatedPlansForGroup, fileName);
+                    await exportService.exportMultipleLessonsAsDocx(generatedPlansForGroup, fileName);
                     await new Promise(resolve => setTimeout(resolve, 250));
                 }
             }
@@ -265,7 +273,7 @@ export const useLessonGeneration = (allSlos: SLO[], contextPdfs: ContextPdf[]) =
     
         setIsLoading(false);
         setGenerationProgress(null);
-    }, [allSlos, getContextPartsForSlo]);
+    }, [allSlos, getContextPartsForSlo, geminiService, exportService]);
 
     const stopGeneration = useCallback(() => {
         isCancelledRef.current = true;

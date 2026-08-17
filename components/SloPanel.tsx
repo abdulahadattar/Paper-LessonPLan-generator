@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { SLO, GroupedSlos, UnitsByGrade } from '../types';
+import { SLO, GroupedSlos, UnitsByGrade } from '../types/slo';
 import { ChevronRightIcon, SearchIcon, WarningIcon } from './icons/MiscIcons';
 import { FileIcon } from './icons/FileIcon';
 

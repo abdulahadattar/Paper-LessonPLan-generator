@@ -1,10 +1,10 @@
 
 import React, { useState } from 'react';
-import { LessonPlan } from '../types';
+import { LessonPlan } from '../types/lesson';
 import MarkdownRenderer from './MarkdownRenderer';
 import { ArrowLeftIcon, BookOpenIcon, ClipboardListIcon, ClockIcon, PuzzleIcon, TargetIcon, DownloadIcon } from './icons/MiscIcons';
 import { FileIcon } from './icons/FileIcon';
-import { exportAsDocx, exportAsPdf } from '../services/exportService';
+import { exportAsDocx, exportAsPdf } from '../features/export';
 
 interface ResultsPanelProps {
   lessonPlans: LessonPlan[];
