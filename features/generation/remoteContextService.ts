@@ -8,17 +8,22 @@ export interface RemotePdf {
 
 import { REMOTE_PDF_BASE_URL, REMOTE_PDF_FILE_NAMES } from '../../config/remotePdfs';
 
+/**
+ * Gets the list of remote PDF textbooks available for context.
+ * @returns An array of remote PDF metadata
+ */
 export const getRemotePdfs = (): RemotePdf[] => {
     return REMOTE_PDF_FILE_NAMES.map((name: string) => {
-        const gradeMatch = name.match(/Grade\.(\d+)/);
-        const unitMatch = name.match(/Unit\.(\d+)/);
+        const [gradeFolder, fileName] = name.split('/');
+        const gradeMatch = gradeFolder.match(/Grade\s+(\d+)/i);
+        const unitMatch = fileName.match(/Unit\s+(\d+)/i);
         if (gradeMatch && unitMatch) {
-            const originalUrl = `${REMOTE_PDF_BASE_URL}${name}`;
+            const encodedUrl = encodeURI(`${REMOTE_PDF_BASE_URL}${name}`);
             return {
-                name,
+                name: fileName,
                 grade: `Grade ${gradeMatch[1]}`,
                 unit: unitMatch[1],
-                url: originalUrl
+                url: encodedUrl
             };
         }
         return null;
