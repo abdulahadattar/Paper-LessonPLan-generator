@@ -9,6 +9,7 @@ import { generateLessonPlan } from './geminiService';
 import { exportAsDocx, exportAsPdf, exportMultipleLessonsAsDocx, exportMultipleLessonsAsPdf } from '../export/exportService';
 import { formatFileName } from '../../lib/export';
 import { fileToPart as fileToPartUtil } from '../../lib/pdf';
+import { LessonPlanDocumentConfig } from '../../config/export';
 import { get, set } from 'idb-keyval';
 
 /**
@@ -18,6 +19,7 @@ import { get, set } from 'idb-keyval';
  * @param contextPdfs - Array of context PDFs for RAG
  * @param geminiService - Optional custom Gemini service for testing
  * @param exportService - Optional custom export service for testing
+ * @param documentConfig - Optional document configuration for exports
  * @returns Generation state and control methods
  */
 export const useLessonGeneration = (
@@ -29,7 +31,8 @@ export const useLessonGeneration = (
         exportAsPdf: typeof exportAsPdf;
         exportMultipleLessonsAsDocx: typeof exportMultipleLessonsAsDocx;
         exportMultipleLessonsAsPdf: typeof exportMultipleLessonsAsPdf;
-    } = { exportAsDocx, exportAsPdf, exportMultipleLessonsAsDocx, exportMultipleLessonsAsPdf }
+    } = { exportAsDocx, exportAsPdf, exportMultipleLessonsAsDocx, exportMultipleLessonsAsPdf },
+    documentConfig?: Partial<LessonPlanDocumentConfig>
 ) => {
     const [isLoading, setIsLoading] = useState(false);
     const [generationProgress, setGenerationProgress] = useState<{ current: number; total: number } | null>(null);
@@ -195,9 +198,9 @@ export const useLessonGeneration = (
                 if (plan) {
                     allGeneratedPlans.push(plan);
                     setLogMessages(prev => [...prev, `Exporting individual files...`]);
-                    await exportService.exportAsDocx(plan, slo.SLO_ID);
+                    await exportService.exportAsDocx(plan, slo.SLO_ID, documentConfig);
                     await new Promise(resolve => setTimeout(resolve, 250));
-                    await exportService.exportAsPdf(plan, slo.SLO_ID);
+                    await exportService.exportAsPdf(plan, slo.SLO_ID, documentConfig);
                     await new Promise(resolve => setTimeout(resolve, 250));
                 }
             }
@@ -252,11 +255,11 @@ export const useLessonGeneration = (
                 if (generatedPlansForGroup.length > 0 && !wasCancelled) {
                     const fileName = formatFileName(groupName);
                     setLogMessages(prev => [...prev, `Combining and exporting ${fileName}.pdf...`]);
-                    await exportService.exportMultipleLessonsAsPdf(generatedPlansForGroup, fileName);
+                    await exportService.exportMultipleLessonsAsPdf(generatedPlansForGroup, fileName, documentConfig);
                     await new Promise(resolve => setTimeout(resolve, 250));
                     
                     setLogMessages(prev => [...prev, `Combining and exporting ${fileName}.docx...`]);
-                    await exportService.exportMultipleLessonsAsDocx(generatedPlansForGroup, fileName);
+                    await exportService.exportMultipleLessonsAsDocx(generatedPlansForGroup, fileName, documentConfig);
                     await new Promise(resolve => setTimeout(resolve, 250));
                 }
             }
@@ -273,7 +276,7 @@ export const useLessonGeneration = (
     
         setIsLoading(false);
         setGenerationProgress(null);
-    }, [allSlos, getContextPartsForSlo, geminiService, exportService]);
+    }, [allSlos, getContextPartsForSlo, geminiService, exportService, documentConfig]);
 
     const stopGeneration = useCallback(() => {
         isCancelledRef.current = true;

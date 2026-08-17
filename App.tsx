@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { ExportOption } from './types/export';
 import InputPanel from './components/InputPanel';
-import { InfoIcon, CloseIcon } from './components/icons/MiscIcons';
+import { InfoIcon, CloseIcon, SettingsIcon } from './components/icons/MiscIcons';
 import { WandIcon } from './components/icons/WandIcon';
 import ResultsPanel from './components/ResultsPanel';
 import SloPanel from './components/SloPanel';
@@ -12,6 +12,7 @@ import GenerationStatusPanel from './components/GenerationStatusPanel';
 import { useSloData, loadInitialSlos } from './features/slo';
 import { useLessonGeneration, generateLessonPlan, getRemotePdfs } from './features/generation';
 import { exportAsDocx, exportAsPdf, exportMultipleLessonsAsDocx, exportMultipleLessonsAsPdf } from './features/export';
+import { useDocumentConfig, DocumentConfigPanel } from './features/settings';
 
 type View = 'slo' | 'results';
 type Theme = 'light' | 'dark';
@@ -28,6 +29,8 @@ const App: React.FC = () => {
     handleDirectorySelected 
   } = useSloData(loadInitialSlos, getRemotePdfs);
 
+  const { config: documentConfig, updateConfig: updateDocumentConfig, resetConfig: resetDocumentConfig } = useDocumentConfig();
+
   const { 
     generateAllLessonPlans, 
     stopGeneration, 
@@ -42,7 +45,7 @@ const App: React.FC = () => {
     exportAsPdf,
     exportMultipleLessonsAsDocx,
     exportMultipleLessonsAsPdf
-  });
+  }, documentConfig);
 
   // UI State
   const [selectedSloUniqueIds, setSelectedSloUniqueIds] = useState<string[]>([]);
@@ -50,6 +53,7 @@ const App: React.FC = () => {
   const [exportOption, setExportOption] = useState<ExportOption>('individual');
   const [view, setView] = useState<View>('slo');
   const [theme, setTheme] = useState<Theme>('light');
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   // Theme Management
   useEffect(() => {
@@ -146,13 +150,20 @@ const App: React.FC = () => {
                 />
              </div>
              
-             <div className="mt-6 pt-6 border-t border-brand-border text-xs text-brand-text-medium text-center">
-                <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1 mb-2 opacity-70">
-                    <InfoIcon className="w-3.5 h-3.5 flex-shrink-0"/>
-                    <span>v1.5 • Local Context RAG</span>
-                </div>
-                <p className="opacity-50">Designed by Abdul Ahad</p>
-             </div>
+              <div className="mt-6 pt-6 border-t border-brand-border text-xs text-brand-text-medium text-center">
+                 <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1 mb-2 opacity-70">
+                     <InfoIcon className="w-3.5 h-3.5 flex-shrink-0"/>
+                     <span>v1.5 • Local Context RAG</span>
+                 </div>
+                 <button 
+                    onClick={() => setIsSettingsOpen(true)}
+                    className="flex items-center justify-center gap-1.5 mx-auto text-brand-text-medium hover:text-brand-primary transition-colors mb-2"
+                 >
+                    <SettingsIcon className="w-3.5 h-3.5" />
+                    <span>Document Settings</span>
+                 </button>
+                 <p className="opacity-50">Designed by Abdul Ahad</p>
+              </div>
           </div>
       </aside>
 
@@ -221,6 +232,14 @@ const App: React.FC = () => {
             )}
         </div>
       </main>
+      {isSettingsOpen && (
+        <DocumentConfigPanel
+          config={documentConfig}
+          onUpdate={updateDocumentConfig}
+          onReset={resetDocumentConfig}
+          onClose={() => setIsSettingsOpen(false)}
+        />
+      )}
     </div>
   );
 };
