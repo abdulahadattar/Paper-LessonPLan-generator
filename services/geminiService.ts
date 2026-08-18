@@ -156,6 +156,9 @@ Use the attached PDF(s) as the primary reference for content, examples, and acti
   } catch (error) {
     console.error("Error generating lesson plan:", error);
     if (error instanceof Error) {
+       if (error.message.includes('does not support pdf input') || error.message.includes('Cannot read')) {
+           throw new Error("PDF_CONTEXT_NOT_SUPPORTED: The current AI model does not support PDF file input. The lesson plan will be generated using the AI's internal knowledge instead. For better results, please upload relevant textbook pages or select a different AI model that supports PDF input.");
+       }
        throw error;
     }
     throw new Error("Unknown error during generation.");

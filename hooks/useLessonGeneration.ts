@@ -140,13 +140,14 @@ export const useLessonGeneration = (allSlos: SLO[], contextPdfs: ContextPdf[]) =
         
         const processSlo = async (slo: SLO): Promise<LessonPlan | null> => {
             const MAX_RETRIES = 1; 
+            const unitContextSlos = selectedSlos.filter(s => s.grade === slo.grade && s.Unit_Name === slo.Unit_Name);
+            
             for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
                 try {
                     if (isCancelledRef.current) return null; 
                     if (attempt > 0) {
                         setLogMessages(prev => [...prev, `Retrying generation for ${slo.SLO_ID}...`]);
                     }
-                    const unitContextSlos = selectedSlos.filter(s => s.grade === slo.grade && s.Unit_Name === slo.Unit_Name);
                     
                     if (attempt === 0) setLogMessages(prev => [...prev, `Preparing context for ${slo.SLO_ID}...`]);
                     const contextFileParts = await getContextPartsForSlo(slo.grade!, slo.Unit_Number);
@@ -163,9 +164,20 @@ export const useLessonGeneration = (allSlos: SLO[], contextPdfs: ContextPdf[]) =
                     setLogMessages(prev => [...prev, `Content received for "${plan.title}"`]);
                     return plan;
                 } catch (error) {
-                    const errorMsg = `Failed for ${slo.SLO_ID} (Attempt ${attempt + 1}/${MAX_RETRIES + 1}): ${error instanceof Error ? error.message : String(error)}`;
-                    console.error(errorMsg);
-                    setLogMessages(prev => [...prev, `ERROR: ${errorMsg}`]);
+                    const errorMsg = error instanceof Error ? error.message : String(error);
+                    if (errorMsg.startsWith('PDF_CONTEXT_NOT_SUPPORTED:')) {
+                        setLogMessages(prev => [...prev, `\nINFO: ${errorMsg}`]);
+                        const plan = await generateLessonPlan(slo, unitContextSlos, []);
+                        if (plan) {
+                            plan.unitNumber = slo.Unit_Number;
+                            setLogMessages(prev => [...prev, `Content received for "${plan.title}" (without PDF context)`]);
+                            return plan;
+                        }
+                        return null;
+                    }
+                    const fullErrorMsg = `Failed for ${slo.SLO_ID} (Attempt ${attempt + 1}/${MAX_RETRIES + 1}): ${errorMsg}`;
+                    console.error(fullErrorMsg);
+                    setLogMessages(prev => [...prev, `ERROR: ${fullErrorMsg}`]);
                     if (attempt < MAX_RETRIES) {
                         await new Promise(resolve => setTimeout(resolve, 1000));
                     }
