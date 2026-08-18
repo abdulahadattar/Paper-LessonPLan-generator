@@ -253,15 +253,29 @@ const createPdfContentForPlan = (lessonPlan: LessonPlan): any[] => {
     return [headerTable, ...resourcesSection, ...procedureSection, ...homeworkSection];
 };
 
+// --- A4 PAGE CONSTANTS ---
+
+const A4_PAGE_WIDTH = 11906;  // 210mm in twips
+const A4_PAGE_HEIGHT = 16838; // 297mm in twips
+const A4_MARGIN = 1134;       // 20mm in twips (~0.79 inch)
+
+const PDF_A4_WIDTH = 595.28;
+const PDF_A4_HEIGHT = 841.89;
+const PDF_MARGIN = 56.7;      // 20mm in points
+
 // --- SINGLE EXPORT FUNCTIONS ---
 
 export const exportAsDocx = async (lessonPlan: LessonPlan, sloId?: string): Promise<void> => {
   const fileName = `${formatFileName(lessonPlan.title, sloId)}.docx`;
-  const narrowMargin = 567;
   const children = createDocxContentForPlan(lessonPlan);
   const doc = new Document({
       sections: [{
-          properties: { page: { margin: { top: narrowMargin, right: narrowMargin, bottom: narrowMargin, left: narrowMargin }}},
+          properties: { 
+              page: { 
+                  size: { width: A4_PAGE_WIDTH, height: A4_PAGE_HEIGHT },
+                  margin: { top: A4_MARGIN, right: A4_MARGIN, bottom: A4_MARGIN, left: A4_MARGIN }
+              }
+          },
           children: children,
       }],
   });
@@ -273,7 +287,8 @@ export const exportAsPdf = async (lessonPlan: LessonPlan, sloId?: string): Promi
     const fileName = `${formatFileName(lessonPlan.title, sloId)}.pdf`;
     const content = createPdfContentForPlan(lessonPlan);
     const docDefinition: any = {
-        pageMargins: [15, 5, 15, 5],
+        pageSize: { width: PDF_A4_WIDTH, height: PDF_A4_HEIGHT },
+        pageMargins: [PDF_MARGIN, PDF_MARGIN, PDF_MARGIN, PDF_MARGIN],
         content: content,
         styles: {
             headerTableTitle: { fontSize: 14, bold: true, alignment: 'center', margin: [0, 2, 0, 2] },
@@ -290,10 +305,12 @@ export const exportAsPdf = async (lessonPlan: LessonPlan, sloId?: string): Promi
 // --- MULTIPLE EXPORT FUNCTIONS ---
 
 export const exportMultipleLessonsAsDocx = async (lessonPlans: LessonPlan[], fileName: string): Promise<void> => {
-    const narrowMargin = 567;
     const sections: ISectionOptions[] = lessonPlans.map((plan, index) => ({
         properties: { 
-            page: { margin: { top: narrowMargin, right: narrowMargin, bottom: narrowMargin, left: narrowMargin } },
+            page: { 
+                size: { width: A4_PAGE_WIDTH, height: A4_PAGE_HEIGHT },
+                margin: { top: A4_MARGIN, right: A4_MARGIN, bottom: A4_MARGIN, left: A4_MARGIN }
+            },
             pageBreakBefore: index > 0,
         },
         children: createDocxContentForPlan(plan),
@@ -314,7 +331,8 @@ export const exportMultipleLessonsAsPdf = async (lessonPlans: LessonPlan[], file
     });
 
     const docDefinition: any = {
-        pageMargins: [15, 5, 15, 5],
+        pageSize: { width: PDF_A4_WIDTH, height: PDF_A4_HEIGHT },
+        pageMargins: [PDF_MARGIN, PDF_MARGIN, PDF_MARGIN, PDF_MARGIN],
         content: allContent,
         styles: {
             headerTableTitle: { fontSize: 14, bold: true, alignment: 'center', margin: [0, 2, 0, 2] },
