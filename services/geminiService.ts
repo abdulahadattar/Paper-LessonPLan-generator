@@ -140,7 +140,7 @@ Use the attached PDF(s) as the primary reference for content, examples, and acti
     }
 
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: 'gemini-flash-lite-latest',
       contents: { parts },
       config: {
         systemInstruction: systemInstruction,
